@@ -179,11 +179,12 @@ export function VaccineCardCapture({ open, onOpenChange, onPhotoCapture, onOcrRe
 function parseVaccineText(text: string): OcrResult {
   const result: OcrResult = {};
   const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+  const fullText = lines.join(' ');
 
-  // Try to find vaccine name - common patterns
+  // Try to find vaccine name - common patterns (Indian immunisation chart + international)
   const vaccinePatterns = [
     /(?:vaccine|vaccination|immunization)[:\s]*(.+)/i,
-    /(?:BCG|OPV|IPV|DPT|DTaP|Hep\s?[AB]|MMR|Rotavirus|PCV|Tdap|Varicella|HPV|Influenza|COVID)/i,
+    /(BCG|OPV\s*\d*|IPV\s*[-\d]*|DPT\s*\/?\.?\s*DTaP?\s*\d*|Hep(?:atitis)?\s*[AB]\s*[-\d]*|MMR\s*\d*|MMRV|Rotavirus|PCV\s*(?:Booster)?|Tdap|Varicella[-\s]*\d*|HPV\s*\d*|Influenza\s*\d*|COVID|HIB\s*\d*|Typhoid|Meningococcal|Japanese\s*Encephalitis|Pneumococcal|Prevnar|Menactra|Rotasii?l)/i,
   ];
   for (const line of lines) {
     for (const pattern of vaccinePatterns) {
@@ -196,9 +197,10 @@ function parseVaccineText(text: string): OcrResult {
     if (result.vaccineName) break;
   }
 
-  // Try to find batch/lot number
+  // Try to find batch/lot number (including Indian sticker formats like "B.No", "Lot:", "LA6683")
   const batchPatterns = [
-    /(?:batch|lot)\s*(?:no|number|#)?[:\s]*([A-Z0-9-]+)/i,
+    /(?:batch|lot|b\.?\s*no\.?)\s*[:\s]*([A-Z0-9][-A-Z0-9]+)/i,
+    /(?:Loc|Lot)[:\s]*([A-Z0-9][-A-Z0-9]+)/i,
   ];
   for (const line of lines) {
     for (const pattern of batchPatterns) {
@@ -211,31 +213,103 @@ function parseVaccineText(text: string): OcrResult {
     if (result.batchNumber) break;
   }
 
-  // Try to find date
+  // Collect all dates found in the text
   const datePatterns = [
-    /(\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{2,4})/,
-    /(\d{4}[\/\-\.]\d{1,2}[\/\-\.]\d{1,2})/,
+    /(\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{2,4})/g,
+    /(\d{4}[\/\-\.]\d{1,2}[\/\-\.]\d{1,2})/g,
+    /(\d{1,2}[\/\-\.]\d{2,4})/g,
   ];
-  for (const line of lines) {
-    for (const pattern of datePatterns) {
-      const match = line.match(pattern);
-      if (match) {
-        try {
-          const dateStr = match[1];
-          const parsed = new Date(dateStr.replace(/\./g, '/'));
-          if (!isNaN(parsed.getTime())) {
-            result.completedDate = parsed.toISOString().split('T')[0];
-            break;
+  const allDates: { raw: string; parsed: Date }[] = [];
+  for (const pattern of datePatterns) {
+    const matches = fullText.matchAll(pattern);
+    for (const m of matches) {
+      try {
+        const dateStr = m[1];
+        // Try common Indian formats: dd/mm/yy, dd/mm/yyyy
+        const parts = dateStr.split(/[\/\-\.]/);
+        let parsed: Date | null = null;
+        if (parts.length === 3) {
+          const [a, b, c] = parts.map(Number);
+          if (c > 100) {
+            // dd/mm/yyyy
+            parsed = new Date(c, b - 1, a);
+          } else if (a > 100) {
+            // yyyy/mm/dd
+            parsed = new Date(a, b - 1, c);
+          } else {
+            // dd/mm/yy
+            const year = c < 50 ? 2000 + c : 1900 + c;
+            parsed = new Date(year, b - 1, a);
           }
-        } catch {}
+        } else if (parts.length === 2) {
+          const [a, b] = parts.map(Number);
+          if (b > 100) {
+            parsed = new Date(b, a - 1, 1);
+          } else {
+            const year = b < 50 ? 2000 + b : 1900 + b;
+            parsed = new Date(year, a - 1, 1);
+          }
+        }
+        if (parsed && !isNaN(parsed.getTime()) && parsed.getFullYear() > 2000) {
+          allDates.push({ raw: dateStr, parsed });
+        }
+      } catch {}
+    }
+  }
+
+  // Look for expiry date near keywords
+  const expiryKeywords = /(?:exp\.?|expiry|expires?|exp\s*date|EXP)[:\s]*/i;
+  const mfgKeywords = /(?:mfg\.?|mfd\.?|manufacturing|mfg\s*date|MFG)[:\s]*/i;
+  
+  for (const line of lines) {
+    if (expiryKeywords.test(line) && !result.expiryDate) {
+      const dateMatch = line.match(/(\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{2,4})/);
+      const monthYearMatch = line.match(/(\d{1,2}[\/\-\.]?\s*(?:JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)\w*[\/\-\.]?\s*\d{2,4})/i);
+      const simpleMatch = line.match(/(?:exp\.?|EXP)[:\s]*(\d{1,2}[\/\-\.]\d{2,4})/i);
+      if (dateMatch) {
+        result.expiryDate = parseDateStr(dateMatch[1]);
+      } else if (monthYearMatch) {
+        result.expiryDate = monthYearMatch[1].trim();
+      } else if (simpleMatch) {
+        result.expiryDate = parseDateStr(simpleMatch[1]);
       }
     }
-    if (result.completedDate) break;
+  }
+
+  // Look for "Given Date" column - dates near "given" keyword
+  const givenKeywords = /(?:given\s*date|date\s*given|administered|vaccinated|done)[:\s]*/i;
+  for (const line of lines) {
+    if (givenKeywords.test(line) && !result.completedDate) {
+      const dateMatch = line.match(/(\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{2,4})/);
+      if (dateMatch) {
+        result.completedDate = parseDateStr(dateMatch[1]);
+      }
+    }
+  }
+
+  // If no given date found via keywords, use the most recent past date
+  if (!result.completedDate && allDates.length > 0) {
+    const now = new Date();
+    const pastDates = allDates.filter(d => d.parsed <= now);
+    if (pastDates.length > 0) {
+      pastDates.sort((a, b) => b.parsed.getTime() - a.parsed.getTime());
+      result.completedDate = pastDates[0].parsed.toISOString().split('T')[0];
+    }
+  }
+
+  // If no expiry found via keywords, use the most future date
+  if (!result.expiryDate && allDates.length > 0) {
+    const now = new Date();
+    const futureDates = allDates.filter(d => d.parsed > now);
+    if (futureDates.length > 0) {
+      futureDates.sort((a, b) => a.parsed.getTime() - b.parsed.getTime());
+      result.expiryDate = futureDates[0].parsed.toISOString().split('T')[0];
+    }
   }
 
   // Try to find doctor/administered by
   const doctorPatterns = [
-    /(?:doctor|dr|physician|administered\s*by|given\s*by)[:\s]*(.+)/i,
+    /(?:doctor|dr\.?|physician|administered\s*by|given\s*by)[:\s]*(.+)/i,
   ];
   for (const line of lines) {
     for (const pattern of doctorPatterns) {
@@ -249,4 +323,27 @@ function parseVaccineText(text: string): OcrResult {
   }
 
   return result;
+}
+
+function parseDateStr(dateStr: string): string {
+  const parts = dateStr.split(/[\/\-\.]/);
+  if (parts.length === 3) {
+    const [a, b, c] = parts.map(Number);
+    let d: Date;
+    if (c > 100) {
+      d = new Date(c, b - 1, a);
+    } else if (a > 100) {
+      d = new Date(a, b - 1, c);
+    } else {
+      const year = c < 50 ? 2000 + c : 1900 + c;
+      d = new Date(year, b - 1, a);
+    }
+    if (!isNaN(d.getTime())) return d.toISOString().split('T')[0];
+  } else if (parts.length === 2) {
+    const [a, b] = parts.map(Number);
+    const year = b < 50 ? 2000 + b : (b > 100 ? b : 1900 + b);
+    const d = new Date(year, a - 1, 1);
+    if (!isNaN(d.getTime())) return d.toISOString().split('T')[0];
+  }
+  return dateStr;
 }
