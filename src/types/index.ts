@@ -35,6 +35,7 @@ export interface Vaccination {
   administeredBy?: string;
   location?: string;
   notes?: string;
+  cardPhoto?: string; // base64 image of vaccine card
   createdAt: string;
 }
 
