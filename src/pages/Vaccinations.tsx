@@ -64,12 +64,13 @@ export default function Vaccinations() {
     setForm(p => ({ ...p, cardPhoto: photo }));
   };
 
-  const handleOcrResult = (result: { vaccineName?: string; batchNumber?: string; completedDate?: string; administeredBy?: string }) => {
+  const handleOcrResult = (result: { vaccineName?: string; batchNumber?: string; completedDate?: string; expiryDate?: string; administeredBy?: string }) => {
     setForm(p => ({
       ...p,
       ...(result.vaccineName && !p.vaccineName ? { vaccineName: result.vaccineName } : {}),
       ...(result.batchNumber && !p.batchNumber ? { batchNumber: result.batchNumber } : {}),
       ...(result.completedDate && !p.completedDate ? { completedDate: result.completedDate } : {}),
+      ...(result.expiryDate && !p.expiryDate ? { expiryDate: result.expiryDate } : {}),
       ...(result.administeredBy && !p.administeredBy ? { administeredBy: result.administeredBy } : {}),
     }));
   };
