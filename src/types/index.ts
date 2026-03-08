@@ -32,6 +32,7 @@ export interface Vaccination {
   dueDate: string;
   completedDate?: string;
   batchNumber?: string;
+  expiryDate?: string;
   administeredBy?: string;
   location?: string;
   notes?: string;

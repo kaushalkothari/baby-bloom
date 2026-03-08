@@ -64,12 +64,13 @@ export default function Vaccinations() {
     setForm(p => ({ ...p, cardPhoto: photo }));
   };
 
-  const handleOcrResult = (result: { vaccineName?: string; batchNumber?: string; completedDate?: string; administeredBy?: string }) => {
+  const handleOcrResult = (result: { vaccineName?: string; batchNumber?: string; completedDate?: string; expiryDate?: string; administeredBy?: string }) => {
     setForm(p => ({
       ...p,
       ...(result.vaccineName && !p.vaccineName ? { vaccineName: result.vaccineName } : {}),
       ...(result.batchNumber && !p.batchNumber ? { batchNumber: result.batchNumber } : {}),
       ...(result.completedDate && !p.completedDate ? { completedDate: result.completedDate } : {}),
+      ...(result.expiryDate && !p.expiryDate ? { expiryDate: result.expiryDate } : {}),
       ...(result.administeredBy && !p.administeredBy ? { administeredBy: result.administeredBy } : {}),
     }));
   };
@@ -117,6 +118,7 @@ export default function Vaccinations() {
               <div><Label>Due Date *</Label><Input type="date" value={form.dueDate || ''} onChange={e => setForm(p => ({ ...p, dueDate: e.target.value }))} /></div>
               <div><Label>Completed Date</Label><Input type="date" value={form.completedDate || ''} onChange={e => setForm(p => ({ ...p, completedDate: e.target.value }))} /></div>
               <div><Label>Batch Number</Label><Input value={form.batchNumber || ''} onChange={e => setForm(p => ({ ...p, batchNumber: e.target.value }))} /></div>
+              <div><Label>Expiry Date</Label><Input type="date" value={form.expiryDate || ''} onChange={e => setForm(p => ({ ...p, expiryDate: e.target.value }))} /></div>
               <div><Label>Administered By</Label><Input value={form.administeredBy || ''} onChange={e => setForm(p => ({ ...p, administeredBy: e.target.value }))} /></div>
               <div><Label>Notes</Label><Textarea value={form.notes || ''} onChange={e => setForm(p => ({ ...p, notes: e.target.value }))} /></div>
               <Button onClick={handleAddCustom} className="w-full">Add Vaccination</Button>
@@ -152,6 +154,7 @@ export default function Vaccinations() {
                   <p><span className="text-muted-foreground">Due:</span> {format(new Date(vs.dueDate), 'PP')}</p>
                   {vs.record?.completedDate && <p><span className="text-muted-foreground">Done:</span> {format(new Date(vs.record.completedDate), 'PP')}</p>}
                   {vs.record?.batchNumber && <p><span className="text-muted-foreground">Batch:</span> {vs.record.batchNumber}</p>}
+                  {vs.record?.expiryDate && <p><span className="text-muted-foreground">Expiry:</span> {format(new Date(vs.record.expiryDate), 'PP')}</p>}
                 </div>
                 <div className="flex items-center gap-1">
                   {vs.record?.cardPhoto && (
