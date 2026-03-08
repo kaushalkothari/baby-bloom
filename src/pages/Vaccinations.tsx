@@ -7,17 +7,18 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Plus, Syringe, Check } from 'lucide-react';
+import { Plus, Syringe, Check, Camera, Image as ImageIcon } from 'lucide-react';
 import { format } from 'date-fns';
 import { vaccineSchedule, getVaccineDueDate } from '@/data/vaccineSchedule';
 import { Vaccination, VaccinationStatus } from '@/types';
+import { VaccineCardCapture } from '@/components/VaccineCardCapture';
 import { toast } from 'sonner';
 
 export default function Vaccinations() {
   const { selectedChild, vaccinations, addVaccination, updateVaccination, deleteVaccination } = useApp();
   const [open, setOpen] = useState(false);
+  const [captureOpen, setCaptureOpen] = useState(false);
+  const [photoViewOpen, setPhotoViewOpen] = useState<string | null>(null);
   const [form, setForm] = useState<Partial<Vaccination>>({});
   const [filter, setFilter] = useState<'all' | VaccinationStatus>('all');
 
@@ -59,6 +60,20 @@ export default function Vaccinations() {
     setOpen(false); setForm({});
   };
 
+  const handlePhotoCapture = (photo: string) => {
+    setForm(p => ({ ...p, cardPhoto: photo }));
+  };
+
+  const handleOcrResult = (result: { vaccineName?: string; batchNumber?: string; completedDate?: string; administeredBy?: string }) => {
+    setForm(p => ({
+      ...p,
+      ...(result.vaccineName && !p.vaccineName ? { vaccineName: result.vaccineName } : {}),
+      ...(result.batchNumber && !p.batchNumber ? { batchNumber: result.batchNumber } : {}),
+      ...(result.completedDate && !p.completedDate ? { completedDate: result.completedDate } : {}),
+      ...(result.administeredBy && !p.administeredBy ? { administeredBy: result.administeredBy } : {}),
+    }));
+  };
+
   const statusColor = (s: VaccinationStatus) =>
     s === 'completed' ? 'bg-success text-success-foreground' :
     s === 'overdue' ? 'bg-destructive text-destructive-foreground' :
@@ -70,9 +85,34 @@ export default function Vaccinations() {
         <h1 className="text-3xl font-display font-bold">Vaccinations</h1>
         <Dialog open={open} onOpenChange={o => { setOpen(o); if (!o) setForm({}); }}>
           <DialogTrigger asChild><Button className="gap-2"><Plus className="h-4 w-4" /> Add Custom</Button></DialogTrigger>
-          <DialogContent>
+          <DialogContent className="max-h-[90vh] overflow-y-auto">
             <DialogHeader><DialogTitle className="font-display">Add Custom Vaccination</DialogTitle></DialogHeader>
             <div className="space-y-4">
+              {/* Scan vaccine card button */}
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full gap-2 border-dashed border-2 h-12"
+                onClick={() => setCaptureOpen(true)}
+              >
+                <Camera className="h-5 w-5 text-primary" />
+                {form.cardPhoto ? 'Retake Vaccine Card Photo' : 'Scan Vaccine Card (OCR)'}
+              </Button>
+
+              {form.cardPhoto && (
+                <div className="relative rounded-lg overflow-hidden border border-border">
+                  <img src={form.cardPhoto} alt="Vaccine card" className="w-full max-h-32 object-contain bg-muted" />
+                  <Button
+                    size="sm"
+                    variant="destructive"
+                    className="absolute top-2 right-2 h-6 text-xs"
+                    onClick={() => setForm(p => ({ ...p, cardPhoto: undefined }))}
+                  >
+                    Remove
+                  </Button>
+                </div>
+              )}
+
               <div><Label>Vaccine Name *</Label><Input value={form.vaccineName || ''} onChange={e => setForm(p => ({ ...p, vaccineName: e.target.value }))} /></div>
               <div><Label>Due Date *</Label><Input type="date" value={form.dueDate || ''} onChange={e => setForm(p => ({ ...p, dueDate: e.target.value }))} /></div>
               <div><Label>Completed Date</Label><Input type="date" value={form.completedDate || ''} onChange={e => setForm(p => ({ ...p, completedDate: e.target.value }))} /></div>
@@ -113,16 +153,41 @@ export default function Vaccinations() {
                   {vs.record?.completedDate && <p><span className="text-muted-foreground">Done:</span> {format(new Date(vs.record.completedDate), 'PP')}</p>}
                   {vs.record?.batchNumber && <p><span className="text-muted-foreground">Batch:</span> {vs.record.batchNumber}</p>}
                 </div>
-                {vs.status !== 'completed' && (
-                  <Button size="sm" variant="outline" className="gap-1" onClick={() => markComplete(vs)}>
-                    <Check className="h-3 w-3" /> Done
-                  </Button>
-                )}
+                <div className="flex items-center gap-1">
+                  {vs.record?.cardPhoto && (
+                    <Button size="sm" variant="ghost" className="gap-1" onClick={() => setPhotoViewOpen(vs.record!.cardPhoto!)}>
+                      <ImageIcon className="h-3 w-3" />
+                    </Button>
+                  )}
+                  {vs.status !== 'completed' && (
+                    <Button size="sm" variant="outline" className="gap-1" onClick={() => markComplete(vs)}>
+                      <Check className="h-3 w-3" /> Done
+                    </Button>
+                  )}
+                </div>
               </div>
             </CardContent>
           </Card>
         ))}
       </div>
+
+      {/* Vaccine Card Capture Dialog */}
+      <VaccineCardCapture
+        open={captureOpen}
+        onOpenChange={setCaptureOpen}
+        onPhotoCapture={handlePhotoCapture}
+        onOcrResult={handleOcrResult}
+      />
+
+      {/* Photo Viewer Dialog */}
+      <Dialog open={!!photoViewOpen} onOpenChange={() => setPhotoViewOpen(null)}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader><DialogTitle className="font-display">Vaccine Card Photo</DialogTitle></DialogHeader>
+          {photoViewOpen && (
+            <img src={photoViewOpen} alt="Vaccine card" className="w-full rounded-lg" />
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
