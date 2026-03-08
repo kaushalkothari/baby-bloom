@@ -154,6 +154,7 @@ export default function Vaccinations() {
                   <p><span className="text-muted-foreground">Due:</span> {format(new Date(vs.dueDate), 'PP')}</p>
                   {vs.record?.completedDate && <p><span className="text-muted-foreground">Done:</span> {format(new Date(vs.record.completedDate), 'PP')}</p>}
                   {vs.record?.batchNumber && <p><span className="text-muted-foreground">Batch:</span> {vs.record.batchNumber}</p>}
+                  {vs.record?.expiryDate && <p><span className="text-muted-foreground">Expiry:</span> {format(new Date(vs.record.expiryDate), 'PP')}</p>}
                 </div>
                 <div className="flex items-center gap-1">
                   {vs.record?.cardPhoto && (
