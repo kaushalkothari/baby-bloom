@@ -8,6 +8,7 @@ interface OcrResult {
   vaccineName?: string;
   batchNumber?: string;
   completedDate?: string;
+  expiryDate?: string;
   administeredBy?: string;
 }
 
