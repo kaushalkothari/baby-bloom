@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { useApp } from '@/contexts/AppContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -7,21 +7,40 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Plus, Pill, Trash2, Pencil } from 'lucide-react';
+import { Plus, Pill, Trash2, Pencil, Image, X } from 'lucide-react';
 import { format } from 'date-fns';
-import { Prescription } from '@/types';
+import { Prescription, Medicine } from '@/types';
 import { toast } from 'sonner';
 
-const emptyRx = (): Partial<Prescription> => ({
-  medicineName: '', dosage: '', frequency: '', duration: '', prescribingDoctor: '',
-  date: new Date().toISOString().split('T')[0], active: true, notes: '',
+const emptyMedicine = (): Medicine => ({
+  id: crypto.randomUUID(), name: '', dosage: '', frequency: '', duration: '',
 });
+
+const emptyRx = (): Partial<Prescription> & { medicines: Medicine[] } => ({
+  medicines: [emptyMedicine()],
+  prescribingDoctor: '',
+  date: new Date().toISOString().split('T')[0],
+  active: true,
+  notes: '',
+  prescriptionImage: '',
+});
+
+// Helper: get medicines array from a prescription (handles legacy single-medicine)
+function getMedicines(rx: Prescription): Medicine[] {
+  if (rx.medicines && rx.medicines.length > 0) return rx.medicines;
+  if (rx.medicineName) {
+    return [{ id: 'legacy', name: rx.medicineName, dosage: rx.dosage || '', frequency: rx.frequency || '', duration: rx.duration || '' }];
+  }
+  return [];
+}
 
 export default function Prescriptions() {
   const { selectedChild, prescriptions, addPrescription, updatePrescription, deletePrescription } = useApp();
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Prescription | null>(null);
-  const [form, setForm] = useState<Partial<Prescription>>(emptyRx());
+  const [form, setForm] = useState<Partial<Prescription> & { medicines: Medicine[] }>(emptyRx());
+  const [previewImg, setPreviewImg] = useState<string | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
 
   if (!selectedChild) return <p className="text-muted-foreground text-center py-20">Please select or add a child first.</p>;
 
@@ -30,12 +49,14 @@ export default function Prescriptions() {
     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
   const handleSave = () => {
-    if (!form.medicineName || !form.dosage) { toast.error('Medicine name and dosage are required.'); return; }
+    const validMeds = form.medicines.filter(m => m.name.trim());
+    if (validMeds.length === 0) { toast.error('At least one medicine name is required.'); return; }
+    const rxData = { ...form, medicines: validMeds };
     if (editing) {
-      updatePrescription({ ...editing, ...form } as Prescription);
+      updatePrescription({ ...editing, ...rxData } as Prescription);
       toast.success('Updated!');
     } else {
-      addPrescription({ ...form, id: crypto.randomUUID(), childId: selectedChild.id, createdAt: new Date().toISOString() } as Prescription);
+      addPrescription({ ...rxData, id: crypto.randomUUID(), childId: selectedChild.id, createdAt: new Date().toISOString() } as Prescription);
       toast.success('Prescription added!');
     }
     setOpen(false); setEditing(null); setForm(emptyRx());
@@ -43,22 +64,95 @@ export default function Prescriptions() {
 
   const set = (key: string, val: any) => setForm(p => ({ ...p, [key]: val }));
 
+  const updateMedicine = (idx: number, key: keyof Medicine, val: string) => {
+    setForm(p => {
+      const meds = [...p.medicines];
+      meds[idx] = { ...meds[idx], [key]: val };
+      return { ...p, medicines: meds };
+    });
+  };
+
+  const addMedicine = () => setForm(p => ({ ...p, medicines: [...p.medicines, emptyMedicine()] }));
+  const removeMedicine = (idx: number) => {
+    if (form.medicines.length <= 1) return;
+    setForm(p => ({ ...p, medicines: p.medicines.filter((_, i) => i !== idx) }));
+  };
+
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) { toast.error('Image must be under 5MB'); return; }
+    const reader = new FileReader();
+    reader.onload = () => set('prescriptionImage', reader.result as string);
+    reader.readAsDataURL(file);
+  };
+
+  const openEditRx = (rx: Prescription) => {
+    setEditing(rx);
+    setForm({
+      ...rx,
+      medicines: getMedicines(rx),
+    });
+    setOpen(true);
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <h1 className="text-3xl font-display font-bold">Prescriptions</h1>
         <Dialog open={open} onOpenChange={o => { setOpen(o); if (!o) { setEditing(null); setForm(emptyRx()); } }}>
           <DialogTrigger asChild><Button className="gap-2"><Plus className="h-4 w-4" /> Add Prescription</Button></DialogTrigger>
-          <DialogContent className="max-w-md">
+          <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
             <DialogHeader><DialogTitle className="font-display">{editing ? 'Edit' : 'Add'} Prescription</DialogTitle></DialogHeader>
             <div className="space-y-4">
-              <div><Label>Medicine *</Label><Input value={form.medicineName || ''} onChange={e => set('medicineName', e.target.value)} /></div>
-              <div><Label>Dosage *</Label><Input value={form.dosage || ''} onChange={e => set('dosage', e.target.value)} placeholder="e.g. 2.5ml" /></div>
-              <div><Label>Frequency</Label><Input value={form.frequency || ''} onChange={e => set('frequency', e.target.value)} placeholder="e.g. Twice daily" /></div>
-              <div><Label>Duration</Label><Input value={form.duration || ''} onChange={e => set('duration', e.target.value)} placeholder="e.g. 5 days" /></div>
+              {/* Medicines list */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <Label className="text-sm font-semibold">Medicines</Label>
+                  <Button type="button" variant="outline" size="sm" onClick={addMedicine} className="gap-1">
+                    <Plus className="h-3 w-3" /> Add Medicine
+                  </Button>
+                </div>
+                {form.medicines.map((med, idx) => (
+                  <div key={med.id} className="rounded-lg border border-border p-3 space-y-2 relative bg-muted/30">
+                    {form.medicines.length > 1 && (
+                      <Button type="button" variant="ghost" size="icon" className="absolute top-1 right-1 h-6 w-6" onClick={() => removeMedicine(idx)}>
+                        <X className="h-3 w-3" />
+                      </Button>
+                    )}
+                    <div className="text-xs font-medium text-muted-foreground">Medicine {idx + 1}</div>
+                    <Input placeholder="Medicine name *" value={med.name} onChange={e => updateMedicine(idx, 'name', e.target.value)} />
+                    <div className="grid grid-cols-3 gap-2">
+                      <Input placeholder="Dosage" value={med.dosage} onChange={e => updateMedicine(idx, 'dosage', e.target.value)} />
+                      <Input placeholder="Frequency" value={med.frequency} onChange={e => updateMedicine(idx, 'frequency', e.target.value)} />
+                      <Input placeholder="Duration" value={med.duration} onChange={e => updateMedicine(idx, 'duration', e.target.value)} />
+                    </div>
+                  </div>
+                ))}
+              </div>
+
               <div><Label>Prescribing Doctor</Label><Input value={form.prescribingDoctor || ''} onChange={e => set('prescribingDoctor', e.target.value)} /></div>
               <div><Label>Date</Label><Input type="date" value={form.date || ''} onChange={e => set('date', e.target.value)} /></div>
               <div><Label>Notes</Label><Textarea value={form.notes || ''} onChange={e => set('notes', e.target.value)} /></div>
+
+              {/* Prescription Image */}
+              <div>
+                <Label>Prescription Image</Label>
+                <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleImageUpload} />
+                {form.prescriptionImage ? (
+                  <div className="relative mt-2">
+                    <img src={form.prescriptionImage} alt="Prescription" className="rounded-lg max-h-40 w-full object-cover border border-border" />
+                    <Button type="button" variant="destructive" size="icon" className="absolute top-1 right-1 h-6 w-6" onClick={() => set('prescriptionImage', '')}>
+                      <X className="h-3 w-3" />
+                    </Button>
+                  </div>
+                ) : (
+                  <Button type="button" variant="outline" className="w-full mt-1 gap-2" onClick={() => fileRef.current?.click()}>
+                    <Image className="h-4 w-4" /> Upload Image
+                  </Button>
+                )}
+              </div>
+
               <Button onClick={handleSave} className="w-full">{editing ? 'Update' : 'Add'}</Button>
             </div>
           </DialogContent>
@@ -72,32 +166,62 @@ export default function Prescriptions() {
         </div>
       ) : (
         <div className="space-y-4">
-          {childRx.map(rx => (
-            <Card key={rx.id} className={!rx.active ? 'opacity-60' : ''}>
-              <CardHeader className="flex flex-row items-start justify-between pb-2">
-                <div>
-                  <CardTitle className="text-base font-display flex items-center gap-2">
-                    <Pill className="h-4 w-4 text-primary" /> {rx.medicineName}
-                    <Badge variant={rx.active ? 'default' : 'secondary'}>{rx.active ? 'Active' : 'Completed'}</Badge>
-                  </CardTitle>
-                  <p className="text-sm text-muted-foreground">{rx.dosage} · {rx.frequency} · {rx.duration}</p>
-                </div>
-                <div className="flex gap-1">
-                  <Button variant="ghost" size="sm" onClick={() => updatePrescription({ ...rx, active: !rx.active })}>
-                    {rx.active ? 'Mark Done' : 'Reactivate'}
-                  </Button>
-                  <Button variant="ghost" size="icon" onClick={() => { setEditing(rx); setForm(rx); setOpen(true); }}><Pencil className="h-4 w-4" /></Button>
-                  <Button variant="ghost" size="icon" onClick={() => { deletePrescription(rx.id); toast.success('Deleted.'); }}><Trash2 className="h-4 w-4 text-destructive" /></Button>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <p className="text-sm text-muted-foreground">Dr. {rx.prescribingDoctor} · {format(new Date(rx.date), 'PP')}</p>
-                {rx.notes && <p className="text-xs text-muted-foreground mt-1 italic">{rx.notes}</p>}
-              </CardContent>
-            </Card>
-          ))}
+          {childRx.map(rx => {
+            const meds = getMedicines(rx);
+            return (
+              <Card key={rx.id} className={!rx.active ? 'opacity-60' : ''}>
+                <CardHeader className="flex flex-row items-start justify-between pb-2">
+                  <div className="flex-1">
+                    <CardTitle className="text-base font-display flex items-center gap-2">
+                      <Pill className="h-4 w-4 text-primary" />
+                      {meds.length === 1 ? meds[0].name : `${meds.length} Medicines`}
+                      <Badge variant={rx.active ? 'default' : 'secondary'}>{rx.active ? 'Active' : 'Completed'}</Badge>
+                    </CardTitle>
+                    {meds.length === 1 ? (
+                      <p className="text-sm text-muted-foreground">{meds[0].dosage} · {meds[0].frequency} · {meds[0].duration}</p>
+                    ) : (
+                      <div className="mt-1 space-y-0.5">
+                        {meds.map((m, i) => (
+                          <p key={i} className="text-sm text-muted-foreground">
+                            <span className="font-medium text-foreground">{m.name}</span> — {m.dosage} · {m.frequency} · {m.duration}
+                          </p>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex gap-1 shrink-0">
+                    <Button variant="ghost" size="sm" onClick={() => updatePrescription({ ...rx, active: !rx.active })}>
+                      {rx.active ? 'Mark Done' : 'Reactivate'}
+                    </Button>
+                    <Button variant="ghost" size="icon" onClick={() => openEditRx(rx)}><Pencil className="h-4 w-4" /></Button>
+                    <Button variant="ghost" size="icon" onClick={() => { deletePrescription(rx.id); toast.success('Deleted.'); }}><Trash2 className="h-4 w-4 text-destructive" /></Button>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-sm text-muted-foreground">Dr. {rx.prescribingDoctor} · {format(new Date(rx.date), 'PP')}</p>
+                  {rx.notes && <p className="text-xs text-muted-foreground mt-1 italic">{rx.notes}</p>}
+                  {rx.prescriptionImage && (
+                    <img
+                      src={rx.prescriptionImage}
+                      alt="Prescription"
+                      className="mt-2 rounded-lg max-h-32 cursor-pointer border border-border hover:opacity-80 transition-opacity"
+                      onClick={() => setPreviewImg(rx.prescriptionImage!)}
+                    />
+                  )}
+                </CardContent>
+              </Card>
+            );
+          })}
         </div>
       )}
+
+      {/* Image preview dialog */}
+      <Dialog open={!!previewImg} onOpenChange={() => setPreviewImg(null)}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader><DialogTitle>Prescription Image</DialogTitle></DialogHeader>
+          {previewImg && <img src={previewImg} alt="Prescription" className="w-full rounded-lg" />}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
