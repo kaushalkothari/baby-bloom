@@ -1,6 +1,5 @@
 import { useState, useRef } from 'react';
 import { useApp } from '@/contexts/AppContext';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -41,7 +40,7 @@ export default function Documents() {
   const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (file.size > 5 * 1024 * 1024) { toast.error('File too large (max 5MB for localStorage).'); return; }
+    if (file.size > 5 * 1024 * 1024) { toast.error('File too large (max 5MB).'); return; }
     const reader = new FileReader();
     reader.onload = ev => setFileData({ data: ev.target?.result as string, type: file.type });
     reader.readAsDataURL(file);
@@ -65,88 +64,95 @@ export default function Documents() {
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between flex-wrap gap-3">
-        <h1 className="text-3xl font-display font-bold">Documents</h1>
-        <Dialog open={open} onOpenChange={o => { setOpen(o); if (!o) { setForm({ type: 'other', date: new Date().toISOString().split('T')[0] }); setFileData(null); } }}>
-          <DialogTrigger asChild><Button className="gap-2"><Plus className="h-4 w-4" /> Upload</Button></DialogTrigger>
-          <DialogContent>
-            <DialogHeader><DialogTitle className="font-display">Upload Document</DialogTitle></DialogHeader>
-            <div className="space-y-4">
-              <div><Label>Name *</Label><Input value={form.name || ''} onChange={e => setForm(p => ({ ...p, name: e.target.value }))} /></div>
-              <div><Label>Type</Label>
-                <Select value={form.type || 'other'} onValueChange={v => setForm(p => ({ ...p, type: v as DocType['type'] }))}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>{docTypes.map(t => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}</SelectContent>
-                </Select>
-              </div>
-              <div><Label>Date</Label><Input type="date" value={form.date || ''} onChange={e => setForm(p => ({ ...p, date: e.target.value }))} /></div>
-              <div>
-                <Label>File *</Label>
-                <Input type="file" accept="image/*,.pdf" ref={fileRef} onChange={handleFile} />
-                {fileData && <p className="text-xs text-muted-foreground mt-1">File loaded ✓</p>}
-              </div>
-              <div><Label>Notes</Label><Textarea value={form.notes || ''} onChange={e => setForm(p => ({ ...p, notes: e.target.value }))} /></div>
-              <Button onClick={handleSave} className="w-full">Upload</Button>
+    <div className="max-w-lg mx-auto">
+      <div className="bg-accent/30 px-4 pt-4 pb-5">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="h-10 w-10 rounded-full bg-primary/20 flex items-center justify-center">
+              <FileText className="h-5 w-5 text-primary" />
             </div>
-          </DialogContent>
-        </Dialog>
-      </div>
-
-      <div className="flex items-center gap-2 flex-wrap">
-        <span className="text-sm text-muted-foreground">Filter:</span>
-        <Button variant={filterType === 'all' ? 'default' : 'outline'} size="sm" onClick={() => setFilterType('all')}>All</Button>
-        {docTypes.map(t => (
-          <Button key={t.value} variant={filterType === t.value ? 'default' : 'outline'} size="sm" onClick={() => setFilterType(t.value)}>{t.label}</Button>
-        ))}
-      </div>
-
-      {childDocs.length === 0 ? (
-        <div className="text-center py-20">
-          <FileText className="h-16 w-16 text-muted-foreground/40 mx-auto mb-4" />
-          <p className="text-muted-foreground">No documents uploaded yet.</p>
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {childDocs.map(doc => (
-            <Card key={doc.id}>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-display flex items-center gap-2">
-                  <FileText className="h-4 w-4 text-primary" /> {doc.name}
-                </CardTitle>
-                <div className="flex items-center gap-2">
-                  <Badge variant="secondary">{docTypes.find(t => t.value === doc.type)?.label}</Badge>
-                  <span className="text-xs text-muted-foreground">{format(new Date(doc.date), 'PP')}</span>
+            <h1 className="text-xl font-display font-bold">Documents</h1>
+          </div>
+          <Dialog open={open} onOpenChange={o => { setOpen(o); if (!o) { setForm({ type: 'other', date: new Date().toISOString().split('T')[0] }); setFileData(null); } }}>
+            <DialogTrigger asChild>
+              <Button size="sm" className="gap-1.5 rounded-full"><Plus className="h-4 w-4" /> Upload</Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader><DialogTitle className="font-display">Upload Document</DialogTitle></DialogHeader>
+              <div className="space-y-4">
+                <div><Label>Name *</Label><Input value={form.name || ''} onChange={e => setForm(p => ({ ...p, name: e.target.value }))} /></div>
+                <div><Label>Type</Label>
+                  <Select value={form.type || 'other'} onValueChange={v => setForm(p => ({ ...p, type: v as DocType['type'] }))}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>{docTypes.map(t => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}</SelectContent>
+                  </Select>
                 </div>
-              </CardHeader>
-              <CardContent>
+                <div><Label>Date</Label><Input type="date" value={form.date || ''} onChange={e => setForm(p => ({ ...p, date: e.target.value }))} /></div>
+                <div>
+                  <Label>File *</Label>
+                  <Input type="file" accept="image/*,.pdf" ref={fileRef} onChange={handleFile} />
+                  {fileData && <p className="text-xs text-muted-foreground mt-1">File loaded ✓</p>}
+                </div>
+                <div><Label>Notes</Label><Textarea value={form.notes || ''} onChange={e => setForm(p => ({ ...p, notes: e.target.value }))} /></div>
+                <Button onClick={handleSave} className="w-full">Upload</Button>
+              </div>
+            </DialogContent>
+          </Dialog>
+        </div>
+      </div>
+
+      <div className="px-4 space-y-3 -mt-3">
+        <div className="flex items-center gap-2 overflow-x-auto pb-1">
+          <Button variant={filterType === 'all' ? 'default' : 'outline'} size="sm" onClick={() => setFilterType('all')} className="rounded-full text-xs shrink-0">All</Button>
+          {docTypes.map(t => (
+            <Button key={t.value} variant={filterType === t.value ? 'default' : 'outline'} size="sm" onClick={() => setFilterType(t.value)} className="rounded-full text-xs shrink-0">{t.label}</Button>
+          ))}
+        </div>
+
+        {childDocs.length === 0 ? (
+          <div className="text-center py-16">
+            <FileText className="h-14 w-14 text-muted-foreground/30 mx-auto mb-3" />
+            <p className="text-sm text-muted-foreground">No documents uploaded yet.</p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {childDocs.map(doc => (
+              <div key={doc.id} className="rounded-xl bg-card border border-border p-4 space-y-2">
+                <div className="flex items-start justify-between">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <FileText className="h-4 w-4 text-primary shrink-0" />
+                    <span className="font-display font-bold text-sm truncate">{doc.name}</span>
+                  </div>
+                  <Badge variant="secondary" className="text-[10px] shrink-0">{docTypes.find(t => t.value === doc.type)?.label}</Badge>
+                </div>
+                <p className="text-xs text-muted-foreground">{format(new Date(doc.date), 'PP')}</p>
                 {doc.fileType.startsWith('image/') && (
-                  <img src={doc.fileData} alt={doc.name} className="w-full h-32 object-cover rounded-md mb-2" />
+                  <img src={doc.fileData} alt={doc.name} className="w-full h-28 object-cover rounded-lg" />
                 )}
-                {doc.notes && <p className="text-xs text-muted-foreground mb-2">{doc.notes}</p>}
+                {doc.notes && <p className="text-[11px] text-muted-foreground">{doc.notes}</p>}
                 <div className="flex gap-2">
                   {doc.fileType.startsWith('image/') && (
-                    <Button variant="outline" size="sm" className="gap-1" onClick={() => setPreview(doc)}>
+                    <Button variant="outline" size="sm" className="gap-1 rounded-full text-xs h-7" onClick={() => setPreview(doc)}>
                       <Eye className="h-3 w-3" /> View
                     </Button>
                   )}
-                  <Button variant="outline" size="sm" className="gap-1" onClick={() => downloadDoc(doc)}>
+                  <Button variant="outline" size="sm" className="gap-1 rounded-full text-xs h-7" onClick={() => downloadDoc(doc)}>
                     <Download className="h-3 w-3" /> Download
                   </Button>
-                  <Button variant="ghost" size="sm" onClick={() => { deleteDocument(doc.id); toast.success('Deleted.'); }}>
+                  <Button variant="ghost" size="sm" className="h-7" onClick={() => { deleteDocument(doc.id); toast.success('Deleted.'); }}>
                     <Trash2 className="h-3 w-3 text-destructive" />
                   </Button>
                 </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
 
       <Dialog open={!!preview} onOpenChange={() => setPreview(null)}>
-        <DialogContent className="max-w-3xl">
+        <DialogContent className="max-w-lg">
           <DialogHeader><DialogTitle>{preview?.name}</DialogTitle></DialogHeader>
-          {preview && <img src={preview.fileData} alt={preview.name} className="w-full rounded-md" />}
+          {preview && <img src={preview.fileData} alt={preview.name} className="w-full rounded-lg" />}
         </DialogContent>
       </Dialog>
     </div>

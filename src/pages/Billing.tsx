@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import { useApp } from '@/contexts/AppContext';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -44,52 +43,63 @@ export default function Billing() {
   const set = (key: string, val: any) => setForm(p => ({ ...p, [key]: val }));
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between flex-wrap gap-3">
-        <div>
-          <h1 className="text-3xl font-display font-bold">Billing & Receipts</h1>
-          <p className="text-muted-foreground">Total spent: <span className="font-bold text-foreground">₹{total.toLocaleString()}</span></p>
-        </div>
-        <Dialog open={open} onOpenChange={o => { setOpen(o); if (!o) { setEditing(null); setForm(emptyBill()); } }}>
-          <DialogTrigger asChild><Button className="gap-2"><Plus className="h-4 w-4" /> Add Bill</Button></DialogTrigger>
-          <DialogContent>
-            <DialogHeader><DialogTitle className="font-display">{editing ? 'Edit' : 'Add'} Bill</DialogTitle></DialogHeader>
-            <div className="space-y-4">
-              <div><Label>Date</Label><Input type="date" value={form.date || ''} onChange={e => set('date', e.target.value)} /></div>
-              <div><Label>Hospital *</Label><Input value={form.hospitalName || ''} onChange={e => set('hospitalName', e.target.value)} /></div>
-              <div><Label>Amount (₹) *</Label><Input type="number" value={form.amount || ''} onChange={e => set('amount', parseFloat(e.target.value) || 0)} /></div>
-              <div><Label>Description</Label><Textarea value={form.description || ''} onChange={e => set('description', e.target.value)} /></div>
-              <Button onClick={handleSave} className="w-full">{editing ? 'Update' : 'Add Bill'}</Button>
+    <div className="max-w-lg mx-auto">
+      <div className="bg-accent/30 px-4 pt-4 pb-5">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="h-10 w-10 rounded-full bg-primary/20 flex items-center justify-center">
+              <Receipt className="h-5 w-5 text-primary" />
             </div>
-          </DialogContent>
-        </Dialog>
+            <div>
+              <h1 className="text-xl font-display font-bold">Billing</h1>
+              <p className="text-xs text-muted-foreground">Total: <span className="font-bold text-foreground">₹{total.toLocaleString()}</span></p>
+            </div>
+          </div>
+          <Dialog open={open} onOpenChange={o => { setOpen(o); if (!o) { setEditing(null); setForm(emptyBill()); } }}>
+            <DialogTrigger asChild>
+              <Button size="sm" className="gap-1.5 rounded-full"><Plus className="h-4 w-4" /> Add</Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader><DialogTitle className="font-display">{editing ? 'Edit' : 'Add'} Bill</DialogTitle></DialogHeader>
+              <div className="space-y-4">
+                <div><Label>Date</Label><Input type="date" value={form.date || ''} onChange={e => set('date', e.target.value)} /></div>
+                <div><Label>Hospital *</Label><Input value={form.hospitalName || ''} onChange={e => set('hospitalName', e.target.value)} /></div>
+                <div><Label>Amount (₹) *</Label><Input type="number" value={form.amount || ''} onChange={e => set('amount', parseFloat(e.target.value) || 0)} /></div>
+                <div><Label>Description</Label><Textarea value={form.description || ''} onChange={e => set('description', e.target.value)} /></div>
+                <Button onClick={handleSave} className="w-full">{editing ? 'Update' : 'Add Bill'}</Button>
+              </div>
+            </DialogContent>
+          </Dialog>
+        </div>
       </div>
 
-      {childBills.length === 0 ? (
-        <div className="text-center py-20">
-          <Receipt className="h-16 w-16 text-muted-foreground/40 mx-auto mb-4" />
-          <p className="text-muted-foreground">No billing records yet.</p>
-        </div>
-      ) : (
-        <div className="space-y-4">
-          {childBills.map(b => (
-            <Card key={b.id}>
-              <CardHeader className="flex flex-row items-start justify-between pb-2">
-                <div>
-                  <CardTitle className="text-base font-display">{b.hospitalName}</CardTitle>
-                  <p className="text-sm text-muted-foreground">{format(new Date(b.date), 'PPP')}</p>
+      <div className="px-4 space-y-3 -mt-3">
+        {childBills.length === 0 ? (
+          <div className="text-center py-16">
+            <Receipt className="h-14 w-14 text-muted-foreground/30 mx-auto mb-3" />
+            <p className="text-sm text-muted-foreground">No billing records yet.</p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {childBills.map(b => (
+              <div key={b.id} className="rounded-xl bg-card border border-border p-4">
+                <div className="flex items-start justify-between">
+                  <div className="min-w-0">
+                    <p className="font-display font-bold text-sm">{b.hospitalName}</p>
+                    <p className="text-xs text-muted-foreground">{format(new Date(b.date), 'PPP')}</p>
+                  </div>
+                  <div className="flex items-center gap-1 shrink-0">
+                    <span className="text-sm font-bold">₹{b.amount.toLocaleString()}</span>
+                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => { setEditing(b); setForm(b); setOpen(true); }}><Pencil className="h-3 w-3" /></Button>
+                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => { deleteBilling(b.id); toast.success('Deleted.'); }}><Trash2 className="h-3 w-3 text-destructive" /></Button>
+                  </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-lg font-bold">₹{b.amount.toLocaleString()}</span>
-                  <Button variant="ghost" size="icon" onClick={() => { setEditing(b); setForm(b); setOpen(true); }}><Pencil className="h-4 w-4" /></Button>
-                  <Button variant="ghost" size="icon" onClick={() => { deleteBilling(b.id); toast.success('Deleted.'); }}><Trash2 className="h-4 w-4 text-destructive" /></Button>
-                </div>
-              </CardHeader>
-              {b.description && <CardContent><p className="text-sm">{b.description}</p></CardContent>}
-            </Card>
-          ))}
-        </div>
-      )}
+                {b.description && <p className="text-xs text-muted-foreground mt-1">{b.description}</p>}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
