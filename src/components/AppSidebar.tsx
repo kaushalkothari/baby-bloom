@@ -32,17 +32,6 @@ export function AppSidebar() {
   const location = useLocation();
   const { children, selectedChildId, setSelectedChildId } = useApp();
 
-  const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      const ok = importData(ev.target?.result as string);
-      toast(ok ? 'Data imported successfully!' : 'Failed to import data.');
-    };
-    reader.readAsText(file);
-    e.target.value = '';
-  };
 
   return (
     <Sidebar collapsible="icon">
