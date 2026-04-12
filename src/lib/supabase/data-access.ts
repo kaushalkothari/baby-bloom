@@ -217,6 +217,8 @@ export async function upsertVaccination(client: Client, userId: string, v: Vacci
     const mime = mimeFromDataUrl(v.cardPhoto, 'image/jpeg');
     const up = await uploadDataUrl(client, userId, v.childId, 'vaccinations', `card${extForMime(mime) || '.jpg'}`, v.cardPhoto, mime);
     cardPath = up.path;
+  } else if (!v.cardPhoto) {
+    cardPath = null;
   }
 
   const row = {

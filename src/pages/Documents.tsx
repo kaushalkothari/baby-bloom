@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useMemo } from 'react';
 import { useApp } from '@/lib/contexts/AppContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -15,6 +15,13 @@ import { Document as DocType } from '@/types';
 import { toast } from 'sonner';
 import { useFilePickerDialogGuard } from '@/hooks/useFilePickerDialogGuard';
 import { normalizeImageDataUrl, isHeic } from '@/lib/imageUtils';
+import {
+  buildLinkedDocumentRows,
+  imageMimeFromSrc,
+  rowDisplayNotes,
+  rowPreview,
+  type LinkedDocumentRow,
+} from '@/lib/documents/linkedDocuments';
 
 const docTypes = [
   { value: 'receipt', label: 'Receipt' },
@@ -32,11 +39,21 @@ interface PickedFile {
 }
 
 export default function Documents() {
-  const { selectedChild, documents, addDocument, deleteDocument, usesRemoteData } = useApp();
+  const {
+    selectedChild,
+    documents,
+    prescriptions,
+    vaccinations,
+    addDocument,
+    deleteDocument,
+    updatePrescription,
+    updateVaccination,
+    usesRemoteData,
+  } = useApp();
   const maxBytes = usesRemoteData ? 50 * 1024 * 1024 : 5 * 1024 * 1024;
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState<Partial<DocType>>({ type: 'other', date: new Date().toISOString().split('T')[0] });
-  const [preview, setPreview] = useState<DocType | null>(null);
+  const [preview, setPreview] = useState<{ name: string; fileData: string } | null>(null);
   const [filterType, setFilterType] = useState<string>('all');
   const fileRef = useRef<HTMLInputElement>(null);
   const [pickedFile, setPickedFile] = useState<PickedFile | null>(null);
@@ -44,10 +61,11 @@ export default function Documents() {
 
   if (!selectedChild) return <p className="text-muted-foreground text-center py-20">Please select or add a child first.</p>;
 
-  const childDocs = documents
-    .filter(d => d.childId === selectedChild.id)
-    .filter(d => filterType === 'all' || d.type === filterType)
-    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  const mergedRows = useMemo(
+    () =>
+      buildLinkedDocumentRows(selectedChild.id, documents, prescriptions, vaccinations, filterType),
+    [selectedChild.id, documents, prescriptions, vaccinations, filterType],
+  );
 
   const resetDialog = () => {
     setForm({ type: 'other', date: new Date().toISOString().split('T')[0] });
@@ -113,11 +131,30 @@ export default function Documents() {
     resetDialog();
   };
 
-  const downloadDoc = (doc: DocType) => {
+  const downloadFile = (name: string, fileData: string) => {
     const a = document.createElement('a');
-    a.href = doc.fileData;
-    a.download = doc.name;
+    a.href = fileData;
+    const ext =
+      fileData.startsWith('data:image/png') ? '.png' :
+      fileData.startsWith('data:image/webp') ? '.webp' :
+      fileData.startsWith('data:image/') ? '.jpg' : '';
+    a.download = name.includes('.') ? name : `${name}${ext || '.jpg'}`;
     a.click();
+  };
+
+  const handleDeleteRow = (row: LinkedDocumentRow) => {
+    if (row.kind === 'upload') {
+      deleteDocument(row.doc.id);
+      toast.success('Deleted.');
+      return;
+    }
+    if (row.kind === 'prescription') {
+      updatePrescription({ ...row.rx, prescriptionImage: '' });
+      toast.success('Prescription image removed.');
+      return;
+    }
+    updateVaccination({ ...row.vax, cardPhoto: undefined });
+    toast.success('Vaccination card image removed.');
   };
 
   const blockCloseWhilePicking = (e: Event) => {
@@ -235,45 +272,78 @@ export default function Documents() {
         ))}
       </div>
 
-      {childDocs.length === 0 ? (
+      {mergedRows.length === 0 ? (
         <div className="text-center py-20">
           <FileText className="h-16 w-16 text-muted-foreground/40 mx-auto mb-4" />
           <p className="text-muted-foreground">No documents uploaded yet.</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {childDocs.map(doc => (
-            <Card key={doc.id}>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-display flex items-center gap-2">
-                  <FileText className="h-4 w-4 text-primary" /> {doc.name}
-                </CardTitle>
-                <div className="flex items-center gap-2">
-                  <Badge variant="secondary">{docTypes.find(t => t.value === doc.type)?.label}</Badge>
-                  <span className="text-xs text-muted-foreground">{format(new Date(doc.date), 'PP')}</span>
-                </div>
-              </CardHeader>
-              <CardContent>
-                {doc.fileType.startsWith('image/') && (
-                  <img src={doc.fileData} alt={doc.name} className="w-full h-32 object-cover rounded-md mb-2" />
-                )}
-                {doc.notes && <p className="text-xs text-muted-foreground mb-2">{doc.notes}</p>}
-                <div className="flex gap-2">
-                  {doc.fileType.startsWith('image/') && (
-                    <Button variant="outline" size="sm" className="gap-1" onClick={() => setPreview(doc)}>
-                      <Eye className="h-3 w-3" /> View
-                    </Button>
+          {mergedRows.map(row => {
+            const key =
+              row.kind === 'upload'
+                ? row.doc.id
+                : row.kind === 'prescription'
+                  ? `rx-img-${row.rx.id}`
+                  : `vax-card-${row.vax.id}`;
+            const derived = row.kind === 'upload' ? null : rowPreview(row);
+            const title = row.kind === 'upload' ? row.doc.name : derived!.name;
+            const typeLabel =
+              row.kind === 'upload'
+                ? docTypes.find(t => t.value === row.doc.type)?.label
+                : row.kind === 'prescription'
+                  ? 'Prescription'
+                  : 'Vaccination Card';
+            const dateStr =
+              row.kind === 'upload'
+                ? row.doc.date
+                : row.kind === 'prescription'
+                  ? row.rx.date
+                  : row.vax.completedDate || row.vax.dueDate;
+            const fileData = row.kind === 'upload' ? row.doc.fileData : derived!.fileData;
+            const fileType =
+              row.kind === 'upload' ? row.doc.fileType : imageMimeFromSrc(fileData);
+            const notes = rowDisplayNotes(row);
+            const showImage = fileType.startsWith('image/');
+
+            return (
+              <Card key={key}>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm font-display flex items-center gap-2">
+                    <FileText className="h-4 w-4 text-primary" /> {title}
+                  </CardTitle>
+                  <div className="flex items-center gap-2">
+                    <Badge variant="secondary">{typeLabel}</Badge>
+                    <span className="text-xs text-muted-foreground">{format(new Date(dateStr), 'PP')}</span>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  {showImage && (
+                    <img src={fileData} alt={title} className="w-full h-32 object-cover rounded-md mb-2" />
                   )}
-                  <Button variant="outline" size="sm" className="gap-1" onClick={() => downloadDoc(doc)}>
-                    <Download className="h-3 w-3" /> Download
-                  </Button>
-                  <Button variant="ghost" size="sm" onClick={() => { deleteDocument(doc.id); toast.success('Deleted.'); }}>
-                    <Trash2 className="h-3 w-3 text-destructive" />
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
+                  {notes && <p className="text-xs text-muted-foreground mb-2">{notes}</p>}
+                  <div className="flex gap-2">
+                    {showImage && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="gap-1"
+                        onClick={() => setPreview({ name: title, fileData })}
+                      >
+                        <Eye className="h-3 w-3" /> View
+                      </Button>
+                    )}
+                    <Button variant="outline" size="sm" className="gap-1" onClick={() => downloadFile(title, fileData)}>
+                      <Download className="h-3 w-3" /> Download
+                    </Button>
+                    <Button variant="ghost" size="sm" onClick={() => handleDeleteRow(row)}>
+                      <Trash2 className="h-3 w-3 text-destructive" />
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })}
         </div>
       )}
 
