@@ -10,7 +10,7 @@ import {
   mapDocRow,
   mapBillRow,
 } from './mappers';
-import { getSignedUrl, uploadDataUrl } from './storage';
+import { getSignedUrl, uploadDataUrl, mimeFromDataUrl, extForMime } from './storage';
 
 type Client = SupabaseClient<Database>;
 type PrescriptionMedicineRow = Database['public']['Tables']['prescription_medicines']['Row'];
@@ -214,7 +214,8 @@ export async function upsertVaccination(client: Client, userId: string, v: Vacci
     .maybeSingle();
   let cardPath = prev?.card_photo_storage_path ?? null;
   if (v.cardPhoto?.startsWith('data:')) {
-    const up = await uploadDataUrl(client, userId, v.childId, 'vaccinations', 'card.jpg', v.cardPhoto, 'image/jpeg');
+    const mime = mimeFromDataUrl(v.cardPhoto, 'image/jpeg');
+    const up = await uploadDataUrl(client, userId, v.childId, 'vaccinations', `card${extForMime(mime) || '.jpg'}`, v.cardPhoto, mime);
     cardPath = up.path;
   }
 
@@ -255,16 +256,19 @@ export async function upsertPrescription(client: Client, userId: string, p: Pres
     .maybeSingle();
   let imagePath = prev?.prescription_image_storage_path ?? null;
   if (p.prescriptionImage?.startsWith('data:')) {
+    const mime = mimeFromDataUrl(p.prescriptionImage, 'image/jpeg');
     const up = await uploadDataUrl(
       client,
       userId,
       p.childId,
       'prescriptions',
-      'rx.jpg',
+      `rx${extForMime(mime) || '.jpg'}`,
       p.prescriptionImage,
-      'image/jpeg',
+      mime,
     );
     imagePath = up.path;
+  } else if (!p.prescriptionImage) {
+    imagePath = null;
   }
 
   const row = {
@@ -372,7 +376,8 @@ export async function upsertBilling(client: Client, userId: string, b: BillingRe
     .maybeSingle();
   let receiptPath = existing?.receipt_image_storage_path ?? null;
   if (b.receiptImage?.startsWith('data:')) {
-    const up = await uploadDataUrl(client, userId, b.childId, 'billing', 'receipt.jpg', b.receiptImage, 'image/jpeg');
+    const mime = mimeFromDataUrl(b.receiptImage, 'image/jpeg');
+    const up = await uploadDataUrl(client, userId, b.childId, 'billing', `receipt${extForMime(mime) || '.jpg'}`, b.receiptImage, mime);
     receiptPath = up.path;
   }
 

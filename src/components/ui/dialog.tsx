@@ -41,7 +41,7 @@ DialogOverlay.displayName = DialogPrimitive.Overlay.displayName;
 const DialogContent = React.forwardRef<
   React.ElementRef<typeof DialogPrimitive.Content>,
   React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content>
->(({ className, children, onInteractOutside, ...props }, ref) => {
+>(({ className, children, onInteractOutside, onFocusOutside, onPointerDownOutside, ...props }, ref) => {
   const [portalContainer, setPortalContainer] = React.useState<HTMLElement | null>(null);
 
   const mergedRef = React.useCallback(
@@ -72,6 +72,12 @@ const DialogContent = React.forwardRef<
             event.preventDefault();
           }
           onInteractOutside?.(event);
+        }}
+        onFocusOutside={(event) => {
+          onFocusOutside?.(event);
+        }}
+        onPointerDownOutside={(event) => {
+          onPointerDownOutside?.(event);
         }}
       >
         <DialogPortalContainerContext.Provider value={portalContainer}>

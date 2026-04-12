@@ -5,6 +5,26 @@ export const BABYBLOOM_BUCKET = 'babybloom';
 
 const SIGNED_URL_TTL = 3600;
 
+const MIME_TO_EXT: Record<string, string> = {
+  'image/jpeg': '.jpg',
+  'image/png': '.png',
+  'image/gif': '.gif',
+  'image/webp': '.webp',
+  'image/svg+xml': '.svg',
+  'application/pdf': '.pdf',
+};
+
+/** Extract MIME from a `data:image/png;base64,...` URL; falls back to provided default. */
+export function mimeFromDataUrl(dataUrl: string, fallback = 'application/octet-stream'): string {
+  const match = dataUrl.match(/^data:([^;,]+)/);
+  return match?.[1] || fallback;
+}
+
+/** Best-effort extension from a MIME type (e.g. `image/heic` → `.heic`). */
+export function extForMime(mime: string): string {
+  return MIME_TO_EXT[mime] || '';
+}
+
 export async function uploadDataUrl(
   client: SupabaseClient<Database>,
   userId: string,

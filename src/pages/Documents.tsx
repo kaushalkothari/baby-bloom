@@ -8,11 +8,13 @@ import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
-import { Plus, FileText, Trash2, Download, Eye } from 'lucide-react';
+import { Plus, FileText, Trash2, Download, Eye, Image } from 'lucide-react';
 import { format, startOfDay, isAfter } from 'date-fns';
 import { DatePicker } from '@/components/ui/date-picker';
 import { Document as DocType } from '@/types';
 import { toast } from 'sonner';
+import { useFilePickerDialogGuard } from '@/hooks/useFilePickerDialogGuard';
+import { normalizeImageDataUrl, isHeic } from '@/lib/imageUtils';
 
 const docTypes = [
   { value: 'receipt', label: 'Receipt' },
@@ -23,6 +25,12 @@ const docTypes = [
   { value: 'other', label: 'Other' },
 ];
 
+interface PickedFile {
+  data: string;
+  type: string;
+  name: string;
+}
+
 export default function Documents() {
   const { selectedChild, documents, addDocument, deleteDocument, usesRemoteData } = useApp();
   const maxBytes = usesRemoteData ? 50 * 1024 * 1024 : 5 * 1024 * 1024;
@@ -31,7 +39,8 @@ export default function Documents() {
   const [preview, setPreview] = useState<DocType | null>(null);
   const [filterType, setFilterType] = useState<string>('all');
   const fileRef = useRef<HTMLInputElement>(null);
-  const [fileData, setFileData] = useState<{ data: string; type: string } | null>(null);
+  const [pickedFile, setPickedFile] = useState<PickedFile | null>(null);
+  const { pickingFile, beforePick, afterPick } = useFilePickerDialogGuard();
 
   if (!selectedChild) return <p className="text-muted-foreground text-center py-20">Please select or add a child first.</p>;
 
@@ -40,26 +49,68 @@ export default function Documents() {
     .filter(d => filterType === 'all' || d.type === filterType)
     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
+  const resetDialog = () => {
+    setForm({ type: 'other', date: new Date().toISOString().split('T')[0] });
+    setPickedFile(null);
+    if (fileRef.current) fileRef.current.value = '';
+  };
+
+  const triggerFilePick = () => {
+    beforePick();
+    fileRef.current?.click();
+  };
+
   const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
+    afterPick();
+    const input = e.target;
+    const file = input.files?.[0];
     if (!file) return;
     if (file.size > maxBytes) {
-      toast.error(usesRemoteData ? 'File too large (max 50MB).' : 'File too large (max 5MB for local storage).');
+      toast.error(usesRemoteData ? 'File too large (max 50 MB).' : 'File too large (max 5 MB for local storage).');
+      input.value = '';
       return;
     }
+    const lower = file.name.toLowerCase();
+    const inferredType =
+      file.type ||
+      (lower.endsWith('.pdf') ? 'application/pdf' : '') ||
+      (lower.endsWith('.heic') ? 'image/heic' : '') ||
+      (lower.endsWith('.heif') ? 'image/heif' : '') ||
+      'application/octet-stream';
+
     const reader = new FileReader();
-    reader.onload = ev => setFileData({ data: ev.target?.result as string, type: file.type });
+    reader.onload = async (ev) => {
+      const raw = ev.target?.result;
+      if (typeof raw !== 'string') return;
+      try {
+        if (isHeic(inferredType, file.name)) {
+          const { data, mime } = await normalizeImageDataUrl(raw, file.name);
+          const jpegName = file.name.replace(/\.heic$/i, '.jpg').replace(/\.heif$/i, '.jpg');
+          setPickedFile({ data, type: mime, name: jpegName });
+        } else {
+          setPickedFile({ data: raw, type: inferredType, name: file.name });
+        }
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : 'Could not process this image.');
+      }
+      input.value = '';
+    };
     reader.readAsDataURL(file);
   };
 
   const handleSave = () => {
-    if (!form.name || !fileData) { toast.error('Name and file are required.'); return; }
+    if (!form.name || !pickedFile) { toast.error('Name and file are required.'); return; }
     addDocument({
-      ...form, id: crypto.randomUUID(), childId: selectedChild.id,
-      fileData: fileData.data, fileType: fileData.type, createdAt: new Date().toISOString(),
+      ...form,
+      id: crypto.randomUUID(),
+      childId: selectedChild.id,
+      fileData: pickedFile.data,
+      fileType: pickedFile.type,
+      createdAt: new Date().toISOString(),
     } as DocType);
     toast.success('Document uploaded!');
-    setOpen(false); setForm({ type: 'other', date: new Date().toISOString().split('T')[0] }); setFileData(null);
+    setOpen(false);
+    resetDialog();
   };
 
   const downloadDoc = (doc: DocType) => {
@@ -69,17 +120,34 @@ export default function Documents() {
     a.click();
   };
 
+  const blockCloseWhilePicking = (e: Event) => {
+    if (pickingFile.current) e.preventDefault();
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <h1 className="text-3xl font-display font-bold">Documents</h1>
-        <Dialog open={open} onOpenChange={o => { setOpen(o); if (!o) { setForm({ type: 'other', date: new Date().toISOString().split('T')[0] }); setFileData(null); } }}>
-          <DialogTrigger asChild><Button className="gap-2"><Plus className="h-4 w-4" /> Upload</Button></DialogTrigger>
-          <DialogContent>
+        <Dialog
+          open={open}
+          onOpenChange={o => {
+            if (!o && pickingFile.current) return;
+            setOpen(o);
+            if (!o) resetDialog();
+          }}
+        >
+          <DialogTrigger asChild>
+            <Button className="gap-2"><Plus className="h-4 w-4" /> Upload</Button>
+          </DialogTrigger>
+          <DialogContent
+            onFocusOutside={blockCloseWhilePicking}
+            onPointerDownOutside={blockCloseWhilePicking}
+          >
             <DialogHeader><DialogTitle className="font-display">Upload Document</DialogTitle></DialogHeader>
             <div className="space-y-4">
               <div><Label>Name *</Label><Input value={form.name || ''} onChange={e => setForm(p => ({ ...p, name: e.target.value }))} /></div>
-              <div><Label>Type</Label>
+              <div>
+                <Label>Type</Label>
                 <Select value={form.type || 'other'} onValueChange={v => setForm(p => ({ ...p, type: v as DocType['type'] }))}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>{docTypes.map(t => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}</SelectContent>
@@ -94,11 +162,64 @@ export default function Documents() {
                   disabled={(d) => isAfter(startOfDay(d), startOfDay(new Date()))}
                 />
               </div>
-              <div>
+
+              {/* File input + inline preview */}
+              <div className="space-y-2">
                 <Label>File *</Label>
-                <Input type="file" accept="image/*,.pdf" ref={fileRef} onChange={handleFile} />
-                {fileData && <p className="text-xs text-muted-foreground mt-1">File loaded ✓</p>}
+                <input
+                  ref={fileRef}
+                  type="file"
+                  accept="image/*,.heic,.heif,.pdf"
+                  className="hidden"
+                  onChange={handleFile}
+                />
+
+                {pickedFile ? (
+                  <div className="rounded-lg border border-border bg-muted/20 overflow-hidden">
+                    {pickedFile.type.startsWith('image/') ? (
+                      <img
+                        src={pickedFile.data}
+                        alt={pickedFile.name}
+                        className="max-h-52 w-full object-contain bg-background"
+                      />
+                    ) : pickedFile.type === 'application/pdf' ? (
+                      <div className="flex items-center gap-3 p-4">
+                        <FileText className="h-10 w-10 shrink-0 text-primary" aria-hidden />
+                        <div className="min-w-0 text-left">
+                          <p className="text-sm font-medium truncate">{pickedFile.name}</p>
+                          <p className="text-xs text-muted-foreground">PDF ready to upload</p>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-3 p-4">
+                        <FileText className="h-8 w-8 shrink-0 text-muted-foreground" aria-hidden />
+                        <p className="text-sm truncate">{pickedFile.name}</p>
+                      </div>
+                    )}
+                    <div className="border-t border-border px-3 py-2 flex gap-2 justify-end">
+                      <Button type="button" variant="outline" size="sm" className="gap-1" onClick={triggerFilePick}>
+                        <Image className="h-4 w-4" /> Replace
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="destructive"
+                        size="sm"
+                        onClick={() => {
+                          setPickedFile(null);
+                          if (fileRef.current) fileRef.current.value = '';
+                        }}
+                      >
+                        Remove
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <Button type="button" variant="outline" className="w-full gap-2" onClick={triggerFilePick}>
+                    <Image className="h-4 w-4" /> Choose File
+                  </Button>
+                )}
               </div>
+
               <div><Label>Notes</Label><Textarea value={form.notes || ''} onChange={e => setForm(p => ({ ...p, notes: e.target.value }))} /></div>
               <Button onClick={handleSave} className="w-full">Upload</Button>
             </div>

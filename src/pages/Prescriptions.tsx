@@ -12,6 +12,8 @@ import { format, startOfDay, isAfter } from 'date-fns';
 import { DatePicker } from '@/components/ui/date-picker';
 import { Prescription, Medicine } from '@/types';
 import { toast } from 'sonner';
+import { useFilePickerDialogGuard } from '@/hooks/useFilePickerDialogGuard';
+import { normalizeImageDataUrl } from '@/lib/imageUtils';
 
 const emptyMedicine = (): Medicine => ({
   id: crypto.randomUUID(), name: '', dosage: '', frequency: '', duration: '',
@@ -26,7 +28,6 @@ const emptyRx = (): Partial<Prescription> & { medicines: Medicine[] } => ({
   prescriptionImage: '',
 });
 
-// Helper: get medicines array from a prescription (handles legacy single-medicine)
 function getMedicines(rx: Prescription): Medicine[] {
   if (rx.medicines && rx.medicines.length > 0) return rx.medicines;
   if (rx.medicineName) {
@@ -42,12 +43,19 @@ export default function Prescriptions() {
   const [form, setForm] = useState<Partial<Prescription> & { medicines: Medicine[] }>(emptyRx());
   const [previewImg, setPreviewImg] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const { pickingFile, beforePick, afterPick } = useFilePickerDialogGuard();
 
   if (!selectedChild) return <p className="text-muted-foreground text-center py-20">Please select or add a child first.</p>;
 
   const childRx = prescriptions
     .filter(p => p.childId === selectedChild.id)
     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+  const resetDialog = () => {
+    setEditing(null);
+    setForm(emptyRx());
+    if (fileRef.current) fileRef.current.value = '';
+  };
 
   const handleSave = () => {
     const validMeds = form.medicines.filter(m => m.name.trim());
@@ -57,13 +65,19 @@ export default function Prescriptions() {
       updatePrescription({ ...editing, ...rxData } as Prescription);
       toast.success('Updated!');
     } else {
-      addPrescription({ ...rxData, id: crypto.randomUUID(), childId: selectedChild.id, createdAt: new Date().toISOString() } as Prescription);
+      addPrescription({
+        ...rxData,
+        id: crypto.randomUUID(),
+        childId: selectedChild.id,
+        createdAt: new Date().toISOString(),
+      } as Prescription);
       toast.success('Prescription added!');
     }
-    setOpen(false); setEditing(null); setForm(emptyRx());
+    setOpen(false);
+    resetDialog();
   };
 
-  const set = (key: string, val: any) => setForm(p => ({ ...p, [key]: val }));
+  const patchForm = (key: string, val: unknown) => setForm(p => ({ ...p, [key]: val }));
 
   const updateMedicine = (idx: number, key: keyof Medicine, val: string) => {
     setForm(p => {
@@ -79,32 +93,69 @@ export default function Prescriptions() {
     setForm(p => ({ ...p, medicines: p.medicines.filter((_, i) => i !== idx) }));
   };
 
+  const triggerFilePick = () => {
+    beforePick();
+    fileRef.current?.click();
+  };
+
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
+    afterPick();
+    const input = e.target;
+    const file = input.files?.[0];
     if (!file) return;
-    if (file.size > 5 * 1024 * 1024) { toast.error('Image must be under 5MB'); return; }
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('Image must be under 5 MB');
+      input.value = '';
+      return;
+    }
     const reader = new FileReader();
-    reader.onload = () => set('prescriptionImage', reader.result as string);
+    reader.onload = async () => {
+      const raw = reader.result;
+      if (typeof raw !== 'string') return;
+      try {
+        const { data } = await normalizeImageDataUrl(raw, file.name);
+        setForm(prev => ({ ...prev, prescriptionImage: data }));
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : 'Could not process this image.');
+      }
+      input.value = '';
+    };
     reader.readAsDataURL(file);
   };
 
   const openEditRx = (rx: Prescription) => {
     setEditing(rx);
-    setForm({
-      ...rx,
-      medicines: getMedicines(rx),
-    });
+    setForm({ ...rx, medicines: getMedicines(rx) });
     setOpen(true);
+  };
+
+  const blockCloseWhilePicking = (e: Event) => {
+    if (pickingFile.current) e.preventDefault();
   };
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <h1 className="text-3xl font-display font-bold">Prescriptions</h1>
-        <Dialog open={open} onOpenChange={o => { setOpen(o); if (!o) { setEditing(null); setForm(emptyRx()); } }}>
-          <DialogTrigger asChild><Button className="gap-2"><Plus className="h-4 w-4" /> Add Prescription</Button></DialogTrigger>
-          <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
-            <DialogHeader><DialogTitle className="font-display">{editing ? 'Edit' : 'Add'} Prescription</DialogTitle></DialogHeader>
+        <Dialog
+          open={open}
+          onOpenChange={o => {
+            if (!o && pickingFile.current) return;
+            setOpen(o);
+            if (!o) resetDialog();
+          }}
+        >
+          <DialogTrigger asChild>
+            <Button className="gap-2"><Plus className="h-4 w-4" /> Add Prescription</Button>
+          </DialogTrigger>
+          <DialogContent
+            className="max-w-lg max-h-[90vh] overflow-y-auto"
+            onFocusOutside={blockCloseWhilePicking}
+            onPointerDownOutside={blockCloseWhilePicking}
+          >
+            <DialogHeader>
+              <DialogTitle className="font-display">{editing ? 'Edit' : 'Add'} Prescription</DialogTitle>
+            </DialogHeader>
             <div className="space-y-4">
               {/* Medicines list */}
               <div className="space-y-3">
@@ -132,31 +183,47 @@ export default function Prescriptions() {
                 ))}
               </div>
 
-              <div><Label>Prescribing Doctor</Label><Input value={form.prescribingDoctor || ''} onChange={e => set('prescribingDoctor', e.target.value)} /></div>
+              <div><Label>Prescribing Doctor</Label><Input value={form.prescribingDoctor || ''} onChange={e => patchForm('prescribingDoctor', e.target.value)} /></div>
               <div className="space-y-2">
                 <Label htmlFor="rx-date">Date</Label>
                 <DatePicker
                   id="rx-date"
                   value={form.date || ''}
-                  onChange={(v) => set('date', v)}
+                  onChange={(v) => patchForm('date', v)}
                   disabled={(d) => isAfter(startOfDay(d), startOfDay(new Date()))}
                 />
               </div>
-              <div><Label>Notes</Label><Textarea value={form.notes || ''} onChange={e => set('notes', e.target.value)} /></div>
+              <div><Label>Notes</Label><Textarea value={form.notes || ''} onChange={e => patchForm('notes', e.target.value)} /></div>
 
-              {/* Prescription Image */}
-              <div>
+              {/* Prescription Image — hidden input + preview */}
+              <div className="space-y-2">
                 <Label>Prescription Image</Label>
-                <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleImageUpload} />
+                <input
+                  ref={fileRef}
+                  type="file"
+                  accept="image/*,.heic,.heif"
+                  className="hidden"
+                  onChange={handleImageUpload}
+                />
+
                 {form.prescriptionImage ? (
-                  <div className="relative mt-2">
-                    <img src={form.prescriptionImage} alt="Prescription" className="rounded-lg max-h-40 w-full object-cover border border-border" />
-                    <Button type="button" variant="destructive" size="icon" className="absolute top-1 right-1 h-6 w-6" onClick={() => set('prescriptionImage', '')}>
-                      <X className="h-3 w-3" />
-                    </Button>
+                  <div className="rounded-lg border border-border bg-muted/20 overflow-hidden">
+                    <img
+                      src={form.prescriptionImage}
+                      alt="Prescription preview"
+                      className="max-h-52 w-full object-contain bg-background"
+                    />
+                    <div className="border-t border-border px-3 py-2 flex gap-2 justify-end">
+                      <Button type="button" variant="outline" size="sm" className="gap-1" onClick={triggerFilePick}>
+                        <Image className="h-4 w-4" /> Replace
+                      </Button>
+                      <Button type="button" variant="destructive" size="sm" onClick={() => patchForm('prescriptionImage', '')}>
+                        Remove
+                      </Button>
+                    </div>
                   </div>
                 ) : (
-                  <Button type="button" variant="outline" className="w-full mt-1 gap-2" onClick={() => fileRef.current?.click()}>
+                  <Button type="button" variant="outline" className="w-full gap-2" onClick={triggerFilePick}>
                     <Image className="h-4 w-4" /> Upload Image
                   </Button>
                 )}
@@ -224,7 +291,7 @@ export default function Prescriptions() {
         </div>
       )}
 
-      {/* Image preview dialog */}
+      {/* Full-screen image preview */}
       <Dialog open={!!previewImg} onOpenChange={() => setPreviewImg(null)}>
         <DialogContent className="max-w-2xl">
           <DialogHeader><DialogTitle>Prescription Image</DialogTitle></DialogHeader>
