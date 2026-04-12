@@ -1,81 +1,61 @@
-import { useLocalStorage } from './useLocalStorage';
-import { Child, HospitalVisit, Vaccination, Prescription, Document, BillingRecord } from '@/types';
+import { useLocalAppData } from '@/hooks/useLocalAppData';
+import { useSupabaseAuth } from '@/lib/supabase/useSupabaseAuth';
+import { isSupabaseConfigured } from '@/lib/supabase/config';
+import { useCloudAppData } from '@/lib/supabase/useCloudAppData';
 
+/**
+ * Data layer:
+ * - **Offline:** `VITE_SUPABASE_URL` + publishable/anon key missing → `localStorage` (`useLocalAppData`).
+ * - **Cloud:** those env vars set + signed in → Supabase (`useCloudAppData`); inserts go to Postgres, not localStorage.
+ */
 export function useAppData() {
-  const [children, setChildren] = useLocalStorage<Child[]>('baby-tracker-children', []);
-  const [visits, setVisits] = useLocalStorage<HospitalVisit[]>('baby-tracker-visits', []);
-  const [vaccinations, setVaccinations] = useLocalStorage<Vaccination[]>('baby-tracker-vaccinations', []);
-  const [prescriptions, setPrescriptions] = useLocalStorage<Prescription[]>('baby-tracker-prescriptions', []);
-  const [documents, setDocuments] = useLocalStorage<Document[]>('baby-tracker-documents', []);
-  const [billing, setBilling] = useLocalStorage<BillingRecord[]>('baby-tracker-billing', []);
-  const [selectedChildId, setSelectedChildId] = useLocalStorage<string | null>('baby-tracker-selected-child', null);
+  const configured = isSupabaseConfigured();
+  const auth = useSupabaseAuth();
+  const local = useLocalAppData();
+  const live = configured && auth.initialized && !!auth.session?.user?.id;
+  const cloud = useCloudAppData(live, auth.session?.user?.id ?? null);
 
-  const selectedChild = children.find(c => c.id === selectedChildId) || children[0] || null;
+  const signOut = auth.signOut;
 
-  const addChild = (child: Child) => setChildren(prev => [...prev, child]);
-  const updateChild = (child: Child) => setChildren(prev => prev.map(c => c.id === child.id ? child : c));
-  const deleteChild = (id: string) => {
-    setChildren(prev => prev.filter(c => c.id !== id));
-    setVisits(prev => prev.filter(v => v.childId !== id));
-    setVaccinations(prev => prev.filter(v => v.childId !== id));
-    setPrescriptions(prev => prev.filter(p => p.childId !== id));
-    setDocuments(prev => prev.filter(d => d.childId !== id));
-    setBilling(prev => prev.filter(b => b.childId !== id));
-  };
+  /** Only meaningful when Supabase is configured; layout shows it when `usesRemoteData`. */
+  const userEmail =
+    configured && auth.session?.user?.email ? auth.session.user.email : null;
 
-  const addVisit = (visit: HospitalVisit) => setVisits(prev => [...prev, visit]);
-  const updateVisit = (visit: HospitalVisit) => setVisits(prev => prev.map(v => v.id === visit.id ? visit : v));
-  const deleteVisit = (id: string) => setVisits(prev => prev.filter(v => v.id !== id));
+  if (!configured) {
+    return {
+      ...local,
+      authLoading: false as const,
+      usesRemoteData: false as const,
+      userEmail: null as string | null,
+      signOut: async () => {},
+    };
+  }
 
-  const addVaccination = (vax: Vaccination) => setVaccinations(prev => [...prev, vax]);
-  const updateVaccination = (vax: Vaccination) => setVaccinations(prev => prev.map(v => v.id === vax.id ? vax : v));
-  const deleteVaccination = (id: string) => setVaccinations(prev => prev.filter(v => v.id !== id));
+  if (!auth.initialized) {
+    return {
+      ...cloud,
+      authLoading: true as const,
+      usesRemoteData: true as const,
+      userEmail: null as string | null,
+      signOut,
+    };
+  }
 
-  const addPrescription = (rx: Prescription) => setPrescriptions(prev => [...prev, rx]);
-  const updatePrescription = (rx: Prescription) => setPrescriptions(prev => prev.map(p => p.id === rx.id ? rx : p));
-  const deletePrescription = (id: string) => setPrescriptions(prev => prev.filter(p => p.id !== id));
-
-  const addDocument = (doc: Document) => setDocuments(prev => [...prev, doc]);
-  const deleteDocument = (id: string) => setDocuments(prev => prev.filter(d => d.id !== id));
-
-  const addBilling = (bill: BillingRecord) => setBilling(prev => [...prev, bill]);
-  const updateBilling = (bill: BillingRecord) => setBilling(prev => prev.map(b => b.id === bill.id ? bill : b));
-  const deleteBilling = (id: string) => setBilling(prev => prev.filter(b => b.id !== id));
-
-  const exportData = () => {
-    const data = { children, visits, vaccinations, prescriptions, documents, billing };
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `baby-tracker-backup-${new Date().toISOString().split('T')[0]}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
-  };
-
-  const importData = (jsonStr: string) => {
-    try {
-      const data = JSON.parse(jsonStr);
-      if (data.children) setChildren(data.children);
-      if (data.visits) setVisits(data.visits);
-      if (data.vaccinations) setVaccinations(data.vaccinations);
-      if (data.prescriptions) setPrescriptions(data.prescriptions);
-      if (data.documents) setDocuments(data.documents);
-      if (data.billing) setBilling(data.billing);
-      return true;
-    } catch {
-      return false;
-    }
-  };
+  if (!auth.session) {
+    return {
+      ...cloud,
+      authLoading: false as const,
+      usesRemoteData: true as const,
+      userEmail: null as string | null,
+      signOut,
+    };
+  }
 
   return {
-    children, selectedChild, selectedChildId, setSelectedChildId,
-    addChild, updateChild, deleteChild,
-    visits, addVisit, updateVisit, deleteVisit,
-    vaccinations, addVaccination, updateVaccination, deleteVaccination,
-    prescriptions, addPrescription, updatePrescription, deletePrescription,
-    documents, addDocument, deleteDocument,
-    billing, addBilling, updateBilling, deleteBilling,
-    exportData, importData,
+    ...cloud,
+    authLoading: false as const,
+    usesRemoteData: true as const,
+    userEmail,
+    signOut,
   };
 }

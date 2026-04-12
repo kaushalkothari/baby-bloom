@@ -24,7 +24,8 @@ const docTypes = [
 ];
 
 export default function Documents() {
-  const { selectedChild, documents, addDocument, deleteDocument } = useApp();
+  const { selectedChild, documents, addDocument, deleteDocument, usesRemoteData } = useApp();
+  const maxBytes = usesRemoteData ? 50 * 1024 * 1024 : 5 * 1024 * 1024;
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState<Partial<DocType>>({ type: 'other', date: new Date().toISOString().split('T')[0] });
   const [preview, setPreview] = useState<DocType | null>(null);
@@ -42,7 +43,10 @@ export default function Documents() {
   const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (file.size > 5 * 1024 * 1024) { toast.error('File too large (max 5MB for localStorage).'); return; }
+    if (file.size > maxBytes) {
+      toast.error(usesRemoteData ? 'File too large (max 50MB).' : 'File too large (max 5MB for local storage).');
+      return;
+    }
     const reader = new FileReader();
     reader.onload = ev => setFileData({ data: ev.target?.result as string, type: file.type });
     reader.readAsDataURL(file);

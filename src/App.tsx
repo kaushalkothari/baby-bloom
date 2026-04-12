@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter } from "react-router-dom";
 import { AppProvider } from "@/lib/contexts/AppContext";
 import { AppRoutes } from "@/routes/AppRoutes";
+import { SupabaseAuthProvider } from "@/lib/supabase/AuthProvider";
 
 const queryClient = new QueryClient();
 
@@ -14,9 +15,11 @@ const App = () => (
       <Toaster />
       <Sonner />
       <BrowserRouter>
-        <AppProvider>
-          <AppRoutes />
-        </AppProvider>
+        <SupabaseAuthProvider>
+          <AppProvider>
+            <AppRoutes />
+          </AppProvider>
+        </SupabaseAuthProvider>
       </BrowserRouter>
     </TooltipProvider>
   </QueryClientProvider>

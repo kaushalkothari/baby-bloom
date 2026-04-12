@@ -14,6 +14,9 @@ interface ImportMetaEnv {
   readonly VITE_SENTRY_REPLAY_ON_ERROR_SAMPLE_RATE?: string;
   readonly VITE_SENTRY_TRACES_SAMPLE_RATE_PROD?: string;
   readonly VITE_SUPABASE_URL?: string;
+  /** New platform key (`sb_publishable_...`). Preferred over legacy anon. */
+  readonly VITE_SUPABASE_PUBLISHABLE_KEY?: string;
+  /** Legacy JWT anon key; used if publishable is unset. */
   readonly VITE_SUPABASE_ANON_KEY?: string;
 }
 

@@ -1,0 +1,2 @@
+-- Optional dev fixtures. Loaded only when `supabase db reset` is used locally.
+-- Remote deploys use `supabase db push` (migrations only).

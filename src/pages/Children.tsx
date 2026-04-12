@@ -41,7 +41,7 @@ export default function Children() {
   const [editing, setEditing] = useState<Child | null>(null);
   const [form, setForm] = useState<Partial<Child>>(emptyChild());
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!form.name || !form.dateOfBirth || !form.gender) {
       toast.error('Name, date of birth, and gender are required.');
       return;
@@ -51,7 +51,8 @@ export default function Children() {
       toast.success('Child updated!');
     } else {
       const child: Child = { ...form, id: crypto.randomUUID(), createdAt: new Date().toISOString() } as Child;
-      addChild(child);
+      const ok = await addChild(child);
+      if (!ok) return;
       setSelectedChildId(child.id);
       toast.success('Child added!');
     }
@@ -110,9 +111,9 @@ export default function Children() {
                   fromYear={new Date().getFullYear() - 30}
                   toYear={new Date().getFullYear()}
                 />
-                <p className="text-xs text-muted-foreground">
+                {/* <p className="text-xs text-muted-foreground">
                   Use the month and year labels at the top of the calendar to jump quickly. Future dates are disabled.
-                </p>
+                </p> */}
               </div>
               <div className="space-y-2">
                 <Label htmlFor="child-gender">Gender *</Label>
@@ -147,7 +148,9 @@ export default function Children() {
                   onChange={e => setForm(p => ({ ...p, notes: e.target.value }))}
                 />
               </div>
-              <Button onClick={handleSave} className="w-full">{editing ? 'Update' : 'Add Child'}</Button>
+              <Button type="button" onClick={() => void handleSave()} className="w-full">
+                {editing ? 'Update' : 'Add Child'}
+              </Button>
             </div>
           </DialogContent>
         </Dialog>
