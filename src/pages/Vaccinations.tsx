@@ -7,6 +7,8 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
+import { Separator } from '@/components/ui/separator';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Plus, Syringe, Check, Image as ImageIcon, ChevronDown, ChevronUp, ExternalLink } from 'lucide-react';
 import { format, startOfDay, isAfter } from 'date-fns';
 import { DatePicker } from '@/components/ui/date-picker';
@@ -87,6 +89,17 @@ function InfoRow({ label, children }: { label: string; children: ReactNode }) {
   );
 }
 
+function DetailsSection({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <div>
+      <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground mb-1.5">
+        {title}
+      </p>
+      <div className="text-xs space-y-1">{children}</div>
+    </div>
+  );
+}
+
 function statusBadgeClass(status: VaccinationStatus): string {
   if (status === 'completed') return 'bg-success text-success-foreground';
   if (status === 'overdue') return 'bg-destructive text-destructive-foreground';
@@ -100,6 +113,7 @@ export default function Vaccinations() {
   const [photoViewOpen, setPhotoViewOpen] = useState<string | null>(null);
   const [filter, setFilter] = useState<'all' | VaccinationStatus>('all');
   const [expandedCard, setExpandedCard] = useState<string | null>(null);
+  const [recordOpen, setRecordOpen] = useState<string | null>(null);
   const [completeOpen, setCompleteOpen] = useState(false);
   const [completeContext, setCompleteContext] = useState<CompleteContext | null>(null);
   const [completeForm, setCompleteForm] = useState<CompleteFormFields>(() => prefillCompleteForm(undefined));
@@ -305,78 +319,171 @@ export default function Vaccinations() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {g.shown.map((vs: ScheduleRow) => {
                   const isExpanded = expandedCard === vs.name;
-                  const hasDetails = !!vs.remarks || (vs.sideEffects && vs.sideEffects.length > 0);
                   const isCompleted = vs.status === 'completed';
                   const record = vs.record;
 
+                  const hasRecord =
+                    !!record && (
+                      !!record.location ||
+                      !!record.administeredBy ||
+                      !!record.administrationSite ||
+                      !!record.vaccineManufacturer ||
+                      !!record.batchNumber ||
+                      !!record.manufacturingDate ||
+                      !!record.expiryDate
+                    );
+                  const hasNotes = !!vs.remarks || (vs.sideEffects && vs.sideEffects.length > 0);
+                  const isRecordOpen = recordOpen === vs.name;
+
                   return (
-                    <Card key={vs.name} className={isCompleted ? 'opacity-75' : ''}>
+                    <Card
+                      key={vs.name}
+                      className={`flex h-full flex-col ${isCompleted ? 'opacity-75' : ''}`}
+                    >
                       <CardHeader className="flex flex-row items-center justify-between pb-2">
                         <div>
                           <CardTitle className="text-base font-display flex items-center gap-2">
                             <Syringe className="h-4 w-4 text-primary" /> {vs.name}
                           </CardTitle>
-                          <p className="text-xs text-muted-foreground mt-1">{vs.description}</p>
+                          <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
+                            {vs.description}
+                          </p>
                         </div>
                         <Badge className={statusBadgeClass(vs.status)}>{vs.status}</Badge>
                       </CardHeader>
-                      <CardContent className="space-y-2">
-                        <div className="flex items-center justify-between">
+                      <CardContent className="flex flex-1 flex-col space-y-2">
+                        <div className="flex items-start justify-between gap-3">
                           <div className="text-sm space-y-1">
-                            <InfoRow label="Due">{format(new Date(vs.dueDate), 'PP')}</InfoRow>
+                            {isCompleted && record?.completedDate ? (
+                              <>
+                                <InfoRow label="Done">
+                                  {format(new Date(record.completedDate), 'PP')}
+                                </InfoRow>
+                                <p className="text-xs text-muted-foreground">
+                                  Due {format(new Date(vs.dueDate), 'PP')}
+                                </p>
+                              </>
+                            ) : (
+                              <InfoRow label="Due">{format(new Date(vs.dueDate), 'PP')}</InfoRow>
+                            )}
                             {vs.dose && <InfoRow label="Dose">{vs.dose}</InfoRow>}
                             {vs.route && <InfoRow label="Route">{vs.route}</InfoRow>}
                             {record?.administrationSite
                               ? <InfoRow label="Site">{record.administrationSite}</InfoRow>
                               : vs.site && <InfoRow label="Recommended site">{vs.site}</InfoRow>}
-                            {record?.completedDate && <InfoRow label="Done">{format(new Date(record.completedDate), 'PP')}</InfoRow>}
-                            {record?.location && <InfoRow label="Hospital">{record.location}</InfoRow>}
-                            {record?.administeredBy && <InfoRow label="By">{record.administeredBy}</InfoRow>}
-                            {record?.vaccineManufacturer && <InfoRow label="Company">{record.vaccineManufacturer}</InfoRow>}
-                            {record?.batchNumber && <InfoRow label="Batch">{record.batchNumber}</InfoRow>}
-                            {record?.manufacturingDate && <InfoRow label="Mfg">{format(new Date(record.manufacturingDate), 'PP')}</InfoRow>}
-                            {record?.expiryDate && <InfoRow label="Expiry">{format(new Date(record.expiryDate), 'PP')}</InfoRow>}
                           </div>
-                          <div className="flex items-center gap-1">
-                            {record?.cardPhoto && (
-                              <Button size="sm" variant="ghost" className="gap-1" onClick={() => setPhotoViewOpen(record.cardPhoto!)}>
-                                <ImageIcon className="h-3 w-3" />
+                          <div className="flex flex-col items-end gap-2 self-start">
+                            <div className="flex items-center gap-1">
+                              {record?.cardPhoto && (
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className="gap-1"
+                                  onClick={() => setPhotoViewOpen(record.cardPhoto!)}
+                                >
+                                  <ImageIcon className="h-3 w-3" />
+                                </Button>
+                              )}
+                              <Button
+                                size="sm"
+                                variant={isCompleted ? 'secondary' : 'outline'}
+                                className="gap-1"
+                                onClick={() => openCompleteScheduled(vs)}
+                              >
+                                <Check className="h-3 w-3" /> {isCompleted ? 'Edit' : 'Done'}
+                              </Button>
+                            </div>
+                            {hasRecord && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="text-xs text-muted-foreground h-7 px-2"
+                                onClick={() =>
+                                  setRecordOpen(isRecordOpen ? null : vs.name)
+                                }
+                              >
+                                {isRecordOpen ? 'Hide record' : 'View record'}
                               </Button>
                             )}
-                            <Button
-                              size="sm"
-                              variant={isCompleted ? 'secondary' : 'outline'}
-                              className="gap-1"
-                              onClick={() => openCompleteScheduled(vs)}
-                            >
-                              <Check className="h-3 w-3" /> {isCompleted ? 'Edit' : 'Done'}
-                            </Button>
                           </div>
                         </div>
 
-                        {hasDetails && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="w-full text-xs text-muted-foreground gap-1 h-7"
-                            onClick={() => setExpandedCard(isExpanded ? null : vs.name)}
-                          >
-                            {isExpanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
-                            {isExpanded ? 'Hide details' : 'More details'}
-                          </Button>
-                        )}
-
-                        {isExpanded && (
-                          <div className="text-xs space-y-2 rounded-md bg-muted/50 p-3">
-                            {vs.remarks && (
-                              <p><span className="font-medium text-foreground/80">Remarks:</span> {vs.remarks}</p>
+                        {(hasRecord || hasNotes) && (
+                          <div className="mt-auto space-y-2">
+                            {hasRecord && isRecordOpen && record && (
+                              <div className="rounded-md bg-muted/40 p-3">
+                                <DetailsSection title="Administration record">
+                                  {record.location && (
+                                    <InfoRow label="Hospital">{record.location}</InfoRow>
+                                  )}
+                                  {record.administeredBy && (
+                                    <InfoRow label="By">{record.administeredBy}</InfoRow>
+                                  )}
+                                  {record.administrationSite && (
+                                    <InfoRow label="Site given">{record.administrationSite}</InfoRow>
+                                  )}
+                                  {record.vaccineManufacturer && (
+                                    <InfoRow label="Company">{record.vaccineManufacturer}</InfoRow>
+                                  )}
+                                  {record.batchNumber && (
+                                    <InfoRow label="Batch">{record.batchNumber}</InfoRow>
+                                  )}
+                                  {record.manufacturingDate && (
+                                    <InfoRow label="Mfg">
+                                      {format(new Date(record.manufacturingDate), 'PP')}
+                                    </InfoRow>
+                                  )}
+                                  {record.expiryDate && (
+                                    <InfoRow label="Expiry">
+                                      {format(new Date(record.expiryDate), 'PP')}
+                                    </InfoRow>
+                                  )}
+                                </DetailsSection>
+                              </div>
                             )}
-                            {vs.sideEffects && vs.sideEffects.length > 0 && (
-                              <div>
-                                <p className="font-medium text-foreground/80 mb-1">Potential side effects:</p>
-                                <ul className="list-disc list-inside space-y-0.5 text-muted-foreground">
-                                  {vs.sideEffects.map((se, i) => <li key={i}>{se}</li>)}
-                                </ul>
+
+                            {hasNotes && (
+                              <div className="space-y-2">
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="w-full text-xs text-muted-foreground gap-1 h-7"
+                                  onClick={() => setExpandedCard(isExpanded ? null : vs.name)}
+                                >
+                                  {isExpanded ? (
+                                    <ChevronUp className="h-3 w-3" />
+                                  ) : (
+                                    <ChevronDown className="h-3 w-3" />
+                                  )}
+                                  {isExpanded ? 'Hide details' : 'More details'}
+                                </Button>
+
+                                {isExpanded && (
+                                  <div className="rounded-md bg-muted/50 p-3">
+                                    <DetailsSection title="Notes">
+                                      {vs.remarks && (
+                                        <p>
+                                          <span className="font-medium text-foreground/80">
+                                            Remarks:
+                                          </span>{' '}
+                                          {vs.remarks}
+                                        </p>
+                                      )}
+                                      {vs.sideEffects && vs.sideEffects.length > 0 && (
+                                        <div>
+                                          <p className="font-medium text-foreground/80 mb-1">
+                                            Potential side effects:
+                                          </p>
+                                          <ul className="list-disc list-inside space-y-0.5 text-muted-foreground">
+                                            {vs.sideEffects.map((se, i) => (
+                                              <li key={i}>{se}</li>
+                                            ))}
+                                          </ul>
+                                        </div>
+                                      )}
+                                    </DetailsSection>
+                                  </div>
+                                )}
                               </div>
                             )}
                           </div>
@@ -430,83 +537,100 @@ export default function Vaccinations() {
                 : 'Mark vaccination completed'}
             </DialogTitle>
           </DialogHeader>
-          <div className="space-y-3">
-            <div>
-              <Label htmlFor="complete-hospital">Hospital name *</Label>
-              <Input
-                id="complete-hospital"
-                value={completeForm.location}
-                onChange={(e) => setCompleteForm((p) => ({ ...p, location: e.target.value }))}
-                placeholder="Clinic or hospital"
-              />
-            </div>
-            <div>
-              <Label htmlFor="complete-by">Administered by</Label>
-              <Input
-                id="complete-by"
-                value={completeForm.administeredBy}
-                onChange={(e) => setCompleteForm((p) => ({ ...p, administeredBy: e.target.value }))}
-                placeholder="Nurse or doctor"
-              />
-            </div>
-            <div>
-              <Label htmlFor="complete-site">Site</Label>
-              <Input
-                id="complete-site"
-                value={completeForm.administrationSite}
-                onChange={(e) => setCompleteForm((p) => ({ ...p, administrationSite: e.target.value }))}
-                placeholder="e.g. Left thigh"
-              />
-            </div>
-            <div>
-              <Label htmlFor="complete-company">Vaccine company</Label>
-              <Input
-                id="complete-company"
-                value={completeForm.vaccineManufacturer}
-                onChange={(e) => setCompleteForm((p) => ({ ...p, vaccineManufacturer: e.target.value }))}
-              />
-            </div>
-            <div>
-              <Label htmlFor="complete-batch">Batch number</Label>
-              <Input
-                id="complete-batch"
-                value={completeForm.batchNumber}
-                onChange={(e) => setCompleteForm((p) => ({ ...p, batchNumber: e.target.value }))}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="complete-mfg">Manufacturing date</Label>
-              <DatePicker
-                id="complete-mfg"
-                value={completeForm.manufacturingDate}
-                onChange={(v) => setCompleteForm((p) => ({ ...p, manufacturingDate: v }))}
-                allowClear
-                fromYear={new Date().getFullYear() - 10}
-                toYear={new Date().getFullYear() + 2}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="complete-expiry">Expiry date</Label>
-              <DatePicker
-                id="complete-expiry"
-                value={completeForm.expiryDate}
-                onChange={(v) => setCompleteForm((p) => ({ ...p, expiryDate: v }))}
-                allowClear
-                fromYear={new Date().getFullYear() - 2}
-                toYear={new Date().getFullYear() + 15}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="complete-done">Date given</Label>
-              <p className="text-xs text-muted-foreground">Defaults to today if not set.</p>
-              <DatePicker
-                id="complete-done"
-                value={completeForm.completedDate}
-                onChange={(v) => setCompleteForm((p) => ({ ...p, completedDate: v }))}
-                allowClear
-                disabled={(d) => isAfter(startOfDay(d), startOfDay(new Date()))}
-              />
-            </div>
+          <div className="space-y-5">
+            <section className="space-y-3">
+              <h3 className="text-sm font-semibold text-muted-foreground">When &amp; where</h3>
+              <div className="space-y-2">
+                <Label htmlFor="complete-done">Date given</Label>
+                <p className="text-xs text-muted-foreground">Defaults to today if not set.</p>
+                <DatePicker
+                  id="complete-done"
+                  value={completeForm.completedDate}
+                  onChange={(v) => setCompleteForm((p) => ({ ...p, completedDate: v }))}
+                  allowClear
+                  disabled={(d) => isAfter(startOfDay(d), startOfDay(new Date()))}
+                />
+              </div>
+              <div>
+                <Label htmlFor="complete-hospital">Hospital name *</Label>
+                <Input
+                  id="complete-hospital"
+                  value={completeForm.location}
+                  onChange={(e) => setCompleteForm((p) => ({ ...p, location: e.target.value }))}
+                  placeholder="Clinic or hospital"
+                />
+              </div>
+              <div>
+                <Label htmlFor="complete-by">Administered by</Label>
+                <Input
+                  id="complete-by"
+                  value={completeForm.administeredBy}
+                  onChange={(e) => setCompleteForm((p) => ({ ...p, administeredBy: e.target.value }))}
+                  placeholder="Nurse or doctor"
+                />
+              </div>
+            </section>
+
+            <section className="space-y-3">
+              <h3 className="text-sm font-semibold text-muted-foreground">How it was given</h3>
+              <div>
+                <Label htmlFor="complete-site">Site</Label>
+                <Input
+                  id="complete-site"
+                  value={completeForm.administrationSite}
+                  onChange={(e) => setCompleteForm((p) => ({ ...p, administrationSite: e.target.value }))}
+                  placeholder="e.g. Left thigh"
+                />
+              </div>
+            </section>
+
+            <Accordion type="single" collapsible>
+              <AccordionItem value="vial" className="border-b-0">
+                <AccordionTrigger className="py-2 text-sm font-semibold text-muted-foreground hover:no-underline">
+                  Vaccine vial details (optional)
+                </AccordionTrigger>
+                <AccordionContent className="space-y-3 pt-2">
+                  <div>
+                    <Label htmlFor="complete-company">Vaccine company</Label>
+                    <Input
+                      id="complete-company"
+                      value={completeForm.vaccineManufacturer}
+                      onChange={(e) => setCompleteForm((p) => ({ ...p, vaccineManufacturer: e.target.value }))}
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="complete-batch">Batch number</Label>
+                    <Input
+                      id="complete-batch"
+                      value={completeForm.batchNumber}
+                      onChange={(e) => setCompleteForm((p) => ({ ...p, batchNumber: e.target.value }))}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="complete-mfg">Manufacturing date</Label>
+                    <DatePicker
+                      id="complete-mfg"
+                      value={completeForm.manufacturingDate}
+                      onChange={(v) => setCompleteForm((p) => ({ ...p, manufacturingDate: v }))}
+                      allowClear
+                      fromYear={new Date().getFullYear() - 10}
+                      toYear={new Date().getFullYear() + 2}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="complete-expiry">Expiry date</Label>
+                    <DatePicker
+                      id="complete-expiry"
+                      value={completeForm.expiryDate}
+                      onChange={(v) => setCompleteForm((p) => ({ ...p, expiryDate: v }))}
+                      allowClear
+                      fromYear={new Date().getFullYear() - 2}
+                      toYear={new Date().getFullYear() + 15}
+                    />
+                  </div>
+                </AccordionContent>
+              </AccordionItem>
+            </Accordion>
           </div>
           <DialogFooter className="gap-2 sm:gap-0">
             <Button
