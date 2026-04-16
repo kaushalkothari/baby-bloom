@@ -39,10 +39,11 @@ export default function Dashboard() {
   const ageMonths = differenceInMonths(new Date(), new Date(selectedChild.dateOfBirth));
   const ageDays = differenceInDays(new Date(), new Date(selectedChild.dateOfBirth));
 
-  // Next due vaccination
   const completedVaxNames = new Set(childVaccinations.filter(v => v.completedDate).map(v => v.vaccineName));
-  const upcomingVax = vaccineSchedule.find(vs => !completedVaxNames.has(vs.name));
+  const upcomingVaxList = vaccineSchedule.filter(vs => !completedVaxNames.has(vs.name));
+  const upcomingVax = upcomingVaxList[0] ?? null;
   const nextVaxDue = upcomingVax ? getVaccineDueDate(selectedChild.dateOfBirth, upcomingVax.ageInWeeks) : null;
+  const upcomingVaxPreview = upcomingVaxList.slice(0, 5);
 
   const totalSpent = childBilling.reduce((sum, b) => sum + b.amount, 0);
   const activeRx = childPrescriptions.filter(p => p.active).length;
@@ -158,31 +159,27 @@ export default function Dashboard() {
             <CardTitle className="text-lg font-display">Upcoming Vaccinations</CardTitle>
           </CardHeader>
           <CardContent>
-            {(() => {
-              const upcoming = vaccineSchedule
-                .filter(vs => !completedVaxNames.has(vs.name))
-                .slice(0, 5);
-              if (upcoming.length === 0) return <p className="text-muted-foreground text-sm">All vaccinations completed! 🎉</p>;
-              return (
-                <div className="space-y-3">
-                  {upcoming.map(vs => {
-                    const due = getVaccineDueDate(selectedChild.dateOfBirth, vs.ageInWeeks);
-                    const isOverdue = new Date(due) < new Date();
-                    return (
-                      <div key={vs.name} className="flex items-center justify-between border-b pb-2 last:border-0">
-                        <div>
-                          <p className="font-medium text-sm">{vs.name}</p>
-                          <p className="text-xs text-muted-foreground">{vs.description}</p>
-                        </div>
-                        <Badge variant={isOverdue ? 'destructive' : 'secondary'} className="text-xs">
-                          {isOverdue ? 'Overdue' : format(new Date(due), 'PP')}
-                        </Badge>
+            {upcomingVaxPreview.length === 0 ? (
+              <p className="text-muted-foreground text-sm">All vaccinations completed! 🎉</p>
+            ) : (
+              <div className="space-y-3">
+                {upcomingVaxPreview.map(vs => {
+                  const due = getVaccineDueDate(selectedChild.dateOfBirth, vs.ageInWeeks);
+                  const isOverdue = new Date(due) < new Date();
+                  return (
+                    <div key={vs.name} className="flex items-center justify-between border-b pb-2 last:border-0">
+                      <div>
+                        <p className="font-medium text-sm">{vs.name}</p>
+                        <p className="text-xs text-muted-foreground">{vs.description}</p>
                       </div>
-                    );
-                  })}
-                </div>
-              );
-            })()}
+                      <Badge variant={isOverdue ? 'destructive' : 'secondary'} className="text-xs">
+                        {isOverdue ? 'Overdue' : format(new Date(due), 'PP')}
+                      </Badge>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>

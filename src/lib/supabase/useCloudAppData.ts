@@ -86,6 +86,17 @@ export function useCloudAppData(active: boolean, userId: string | null): CloudAp
   const [billing, setBilling] = useState<BillingRecord[]>([]);
   const [selectedChildId, setSelectedChildIdState] = useState<string | null>(null);
 
+  /** Fire-and-forget async op with consistent error toasting. */
+  const runAsync = useCallback((fallbackError: string, op: () => Promise<void>): void => {
+    void (async () => {
+      try {
+        await op();
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : fallbackError);
+      }
+    })();
+  }, []);
+
   useEffect(() => {
     if (!active || !userId) {
       setSelectedChildIdState(null);
@@ -175,251 +186,187 @@ export function useCloudAppData(active: boolean, userId: string | null): CloudAp
   const updateChild = useCallback(
     (child: Child) => {
       if (!active || !userId || !client) return;
-      void (async () => {
-        try {
-          const row = await db.updateChildRow(client, child);
-          setChildren((p) => p.map((c) => (c.id === row.id ? row : c)));
-        } catch (e) {
-          toast.error(e instanceof Error ? e.message : 'Could not update child');
-        }
-      })();
+      runAsync('Could not update child', async () => {
+        const row = await db.updateChildRow(client, child);
+        setChildren((p) => p.map((c) => (c.id === row.id ? row : c)));
+      });
     },
-    [active, userId, client],
+    [active, userId, client, runAsync],
   );
 
   const deleteChild = useCallback(
     (id: string) => {
       if (!active || !client) return;
-      void (async () => {
-        try {
-          await db.deleteChildRow(client, id);
-          setChildren((p) => p.filter((c) => c.id !== id));
-          setVisits((p) => p.filter((v) => v.childId !== id));
-          setVaccinations((p) => p.filter((v) => v.childId !== id));
-          setPrescriptions((p) => p.filter((r) => r.childId !== id));
-          setDocuments((p) => p.filter((d) => d.childId !== id));
-          setBilling((p) => p.filter((b) => b.childId !== id));
-          setSelectedChildIdState((cur) => (cur === id ? null : cur));
-        } catch (e) {
-          toast.error(e instanceof Error ? e.message : 'Could not delete child');
-        }
-      })();
+      runAsync('Could not delete child', async () => {
+        await db.deleteChildRow(client, id);
+        setChildren((p) => p.filter((c) => c.id !== id));
+        setVisits((p) => p.filter((v) => v.childId !== id));
+        setVaccinations((p) => p.filter((v) => v.childId !== id));
+        setPrescriptions((p) => p.filter((r) => r.childId !== id));
+        setDocuments((p) => p.filter((d) => d.childId !== id));
+        setBilling((p) => p.filter((b) => b.childId !== id));
+        setSelectedChildIdState((cur) => (cur === id ? null : cur));
+      });
     },
-    [active, client],
+    [active, client, runAsync],
   );
 
   const addVisit = useCallback(
     (visit: HospitalVisit) => {
       if (!active || !client) return;
-      void (async () => {
-        try {
-          const row = await db.upsertVisit(client, visit);
-          setVisits((p) => [...p.filter((x) => x.id !== row.id), row]);
-        } catch (e) {
-          toast.error(e instanceof Error ? e.message : 'Could not save visit');
-        }
-      })();
+      runAsync('Could not save visit', async () => {
+        const row = await db.upsertVisit(client, visit);
+        setVisits((p) => [...p.filter((x) => x.id !== row.id), row]);
+      });
     },
-    [active, client],
+    [active, client, runAsync],
   );
 
   const updateVisit = useCallback(
     (visit: HospitalVisit) => {
       if (!active || !client) return;
-      void (async () => {
-        try {
-          const row = await db.upsertVisit(client, visit);
-          setVisits((p) => p.map((v) => (v.id === row.id ? row : v)));
-        } catch (e) {
-          toast.error(e instanceof Error ? e.message : 'Could not update visit');
-        }
-      })();
+      runAsync('Could not update visit', async () => {
+        const row = await db.upsertVisit(client, visit);
+        setVisits((p) => p.map((v) => (v.id === row.id ? row : v)));
+      });
     },
-    [active, client],
+    [active, client, runAsync],
   );
 
   const deleteVisit = useCallback(
     (id: string) => {
       if (!active || !client) return;
-      void (async () => {
-        try {
-          await db.deleteVisitRow(client, id);
-          setVisits((p) => p.filter((v) => v.id !== id));
-        } catch (e) {
-          toast.error(e instanceof Error ? e.message : 'Could not delete visit');
-        }
-      })();
+      runAsync('Could not delete visit', async () => {
+        await db.deleteVisitRow(client, id);
+        setVisits((p) => p.filter((v) => v.id !== id));
+      });
     },
-    [active, client],
+    [active, client, runAsync],
   );
 
   const addVaccination = useCallback(
     (vax: Vaccination) => {
       if (!active || !userId || !client) return;
-      void (async () => {
-        try {
-          const row = await db.upsertVaccination(client, userId, vax);
-          setVaccinations((p) => [...p.filter((x) => x.id !== row.id), row]);
-        } catch (e) {
-          toast.error(e instanceof Error ? e.message : 'Could not save vaccination');
-        }
-      })();
+      runAsync('Could not save vaccination', async () => {
+        const row = await db.upsertVaccination(client, userId, vax);
+        setVaccinations((p) => [...p.filter((x) => x.id !== row.id), row]);
+      });
     },
-    [active, userId, client],
+    [active, userId, client, runAsync],
   );
 
   const updateVaccination = useCallback(
     (vax: Vaccination) => {
       if (!active || !userId || !client) return;
-      void (async () => {
-        try {
-          const row = await db.upsertVaccination(client, userId, vax);
-          setVaccinations((p) => p.map((v) => (v.id === row.id ? row : v)));
-        } catch (e) {
-          toast.error(e instanceof Error ? e.message : 'Could not update vaccination');
-        }
-      })();
+      runAsync('Could not update vaccination', async () => {
+        const row = await db.upsertVaccination(client, userId, vax);
+        setVaccinations((p) => p.map((v) => (v.id === row.id ? row : v)));
+      });
     },
-    [active, userId, client],
+    [active, userId, client, runAsync],
   );
 
   const deleteVaccination = useCallback(
     (id: string) => {
       if (!active || !client) return;
-      void (async () => {
-        try {
-          await db.deleteVaccinationRow(client, id);
-          setVaccinations((p) => p.filter((v) => v.id !== id));
-        } catch (e) {
-          toast.error(e instanceof Error ? e.message : 'Could not delete vaccination');
-        }
-      })();
+      runAsync('Could not delete vaccination', async () => {
+        await db.deleteVaccinationRow(client, id);
+        setVaccinations((p) => p.filter((v) => v.id !== id));
+      });
     },
-    [active, client],
+    [active, client, runAsync],
   );
 
   const addPrescription = useCallback(
     (rx: Prescription) => {
       if (!active || !userId || !client) return;
-      void (async () => {
-        try {
-          const row = await db.upsertPrescription(client, userId, rx);
-          setPrescriptions((p) => [...p.filter((x) => x.id !== row.id), row]);
-        } catch (e) {
-          toast.error(e instanceof Error ? e.message : 'Could not save prescription');
-        }
-      })();
+      runAsync('Could not save prescription', async () => {
+        const row = await db.upsertPrescription(client, userId, rx);
+        setPrescriptions((p) => [...p.filter((x) => x.id !== row.id), row]);
+      });
     },
-    [active, userId, client],
+    [active, userId, client, runAsync],
   );
 
   const updatePrescription = useCallback(
     (rx: Prescription) => {
       if (!active || !userId || !client) return;
-      void (async () => {
-        try {
-          const row = await db.upsertPrescription(client, userId, rx);
-          setPrescriptions((p) => p.map((x) => (x.id === row.id ? row : x)));
-        } catch (e) {
-          toast.error(e instanceof Error ? e.message : 'Could not update prescription');
-        }
-      })();
+      runAsync('Could not update prescription', async () => {
+        const row = await db.upsertPrescription(client, userId, rx);
+        setPrescriptions((p) => p.map((x) => (x.id === row.id ? row : x)));
+      });
     },
-    [active, userId, client],
+    [active, userId, client, runAsync],
   );
 
   const deletePrescription = useCallback(
     (id: string) => {
       if (!active || !client) return;
-      void (async () => {
-        try {
-          await db.deletePrescriptionRow(client, id);
-          setPrescriptions((p) => p.filter((x) => x.id !== id));
-        } catch (e) {
-          toast.error(e instanceof Error ? e.message : 'Could not delete prescription');
-        }
-      })();
+      runAsync('Could not delete prescription', async () => {
+        await db.deletePrescriptionRow(client, id);
+        setPrescriptions((p) => p.filter((x) => x.id !== id));
+      });
     },
-    [active, client],
+    [active, client, runAsync],
   );
 
   const addDocument = useCallback(
     (doc: Document) => {
       if (!active || !userId || !client) return;
-      void (async () => {
-        try {
-          if (!doc.fileData.startsWith('data:')) {
-            toast.error('File must be uploaded from this device (cloud mode).');
-            return;
-          }
-          const row = await db.insertDocument(client, userId, doc, doc.fileData, doc.fileType);
-          setDocuments((p) => [...p, row]);
-        } catch (e) {
-          toast.error(e instanceof Error ? e.message : 'Could not upload document');
-        }
-      })();
+      if (!doc.fileData.startsWith('data:')) {
+        toast.error('File must be uploaded from this device (cloud mode).');
+        return;
+      }
+      runAsync('Could not upload document', async () => {
+        const row = await db.insertDocument(client, userId, doc, doc.fileData, doc.fileType);
+        setDocuments((p) => [...p, row]);
+      });
     },
-    [active, userId, client],
+    [active, userId, client, runAsync],
   );
 
   const deleteDocument = useCallback(
     (id: string) => {
       if (!active || !client) return;
-      void (async () => {
-        try {
-          await db.deleteDocumentRow(client, id);
-          setDocuments((p) => p.filter((d) => d.id !== id));
-        } catch (e) {
-          toast.error(e instanceof Error ? e.message : 'Could not delete document');
-        }
-      })();
+      runAsync('Could not delete document', async () => {
+        await db.deleteDocumentRow(client, id);
+        setDocuments((p) => p.filter((d) => d.id !== id));
+      });
     },
-    [active, client],
+    [active, client, runAsync],
   );
 
   const addBilling = useCallback(
     (bill: BillingRecord) => {
       if (!active || !userId || !client) return;
-      void (async () => {
-        try {
-          const row = await db.upsertBilling(client, userId, bill);
-          setBilling((p) => [...p.filter((x) => x.id !== row.id), row]);
-        } catch (e) {
-          toast.error(e instanceof Error ? e.message : 'Could not save bill');
-        }
-      })();
+      runAsync('Could not save bill', async () => {
+        const row = await db.upsertBilling(client, userId, bill);
+        setBilling((p) => [...p.filter((x) => x.id !== row.id), row]);
+      });
     },
-    [active, userId, client],
+    [active, userId, client, runAsync],
   );
 
   const updateBilling = useCallback(
     (bill: BillingRecord) => {
       if (!active || !userId || !client) return;
-      void (async () => {
-        try {
-          const row = await db.upsertBilling(client, userId, bill);
-          setBilling((p) => p.map((b) => (b.id === row.id ? row : b)));
-        } catch (e) {
-          toast.error(e instanceof Error ? e.message : 'Could not update bill');
-        }
-      })();
+      runAsync('Could not update bill', async () => {
+        const row = await db.upsertBilling(client, userId, bill);
+        setBilling((p) => p.map((b) => (b.id === row.id ? row : b)));
+      });
     },
-    [active, userId, client],
+    [active, userId, client, runAsync],
   );
 
   const deleteBilling = useCallback(
     (id: string) => {
       if (!active || !client) return;
-      void (async () => {
-        try {
-          await db.deleteBillingRow(client, id);
-          setBilling((p) => p.filter((b) => b.id !== id));
-        } catch (e) {
-          toast.error(e instanceof Error ? e.message : 'Could not delete bill');
-        }
-      })();
+      runAsync('Could not delete bill', async () => {
+        await db.deleteBillingRow(client, id);
+        setBilling((p) => p.filter((b) => b.id !== id));
+      });
     },
-    [active, client],
+    [active, client, runAsync],
   );
 
   const exportData = useCallback(() => {

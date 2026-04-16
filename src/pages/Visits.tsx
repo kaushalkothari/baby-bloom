@@ -11,8 +11,9 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { Plus, Trash2, Pencil, Stethoscope, ChevronDown, Pill, Receipt, FileText } from 'lucide-react';
 import { format, startOfDay, isAfter } from 'date-fns';
 import { DatePicker } from '@/components/ui/date-picker';
-import { HospitalVisit } from '@/types';
+import { HospitalVisit, Prescription } from '@/types';
 import { toast } from 'sonner';
+import { medsFromRx } from '@/lib/documents/linkedDocuments';
 
 const emptyVisit = (): Partial<HospitalVisit> => ({
   date: new Date().toISOString().split('T')[0], hospitalName: '', doctorName: '', reason: '', description: '',
@@ -51,20 +52,15 @@ export default function Visits() {
   const openEdit = (v: HospitalVisit) => { setEditing(v); setForm(v); setOpen(true); };
   const set = (key: string, val: string | number) => setForm(p => ({ ...p, [key]: val }));
 
-  // Get related records for a visit by matching visitId OR same date
+  // Records linked to a visit by visitId OR same-day match on the record's date.
   const getRelatedRecords = (visit: HospitalVisit) => {
-    const visitDate = visit.date;
-    const rxList = prescriptions.filter(p => p.childId === selectedChild!.id && (p.visitId === visit.id || p.date === visitDate));
-    const billList = billing.filter(b => b.childId === selectedChild!.id && (b.visitId === visit.id || b.date === visitDate));
-    const docList = documents.filter(d => d.childId === selectedChild!.id && (d.visitId === visit.id || d.date === visitDate));
-    return { rxList, billList, docList };
-  };
-
-  // Helper for medicine display
-  const getMedicines = (rx: any) => {
-    if (rx.medicines?.length > 0) return rx.medicines;
-    if (rx.medicineName) return [{ name: rx.medicineName, dosage: rx.dosage, frequency: rx.frequency, duration: rx.duration }];
-    return [];
+    const linkedToVisit = (record: { childId: string; visitId?: string; date: string }) =>
+      record.childId === selectedChild!.id && (record.visitId === visit.id || record.date === visit.date);
+    return {
+      rxList: prescriptions.filter(linkedToVisit),
+      billList: billing.filter(linkedToVisit),
+      docList: documents.filter(linkedToVisit),
+    };
   };
 
   return (
@@ -159,11 +155,11 @@ export default function Visits() {
                             <div className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
                               <Pill className="h-3.5 w-3.5 text-primary" /> Prescriptions
                             </div>
-                            {rxList.map(rx => {
-                              const meds = getMedicines(rx);
+                            {rxList.map((rx: Prescription) => {
+                              const meds = medsFromRx(rx);
                               return (
                                 <div key={rx.id} className="text-sm border-l-2 border-primary/30 pl-3">
-                                  {meds.map((m: any, i: number) => (
+                                  {meds.map((m, i) => (
                                     <p key={i}><span className="font-medium">{m.name}</span> — {m.dosage} · {m.frequency} · {m.duration}</p>
                                   ))}
                                   <p className="text-xs text-muted-foreground">Dr. {rx.prescribingDoctor}</p>

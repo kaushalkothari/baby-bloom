@@ -18,8 +18,12 @@ import { normalizeImageDataUrl, isHeic } from '@/lib/imageUtils';
 import {
   buildLinkedDocumentRows,
   imageMimeFromSrc,
+  rowDate,
   rowDisplayNotes,
-  rowPreview,
+  rowFileData,
+  rowKey,
+  rowTitle,
+  rowTypeLabel,
   type LinkedDocumentRow,
 } from '@/lib/documents/linkedDocuments';
 
@@ -61,13 +65,15 @@ export default function Documents() {
   const [pickedFile, setPickedFile] = useState<PickedFile | null>(null);
   const { pickingFile, beforePick, afterPick } = useFilePickerDialogGuard();
 
-  if (!selectedChild) return <p className="text-muted-foreground text-center py-20">Please select or add a child first.</p>;
-
   const mergedRows = useMemo(
     () =>
-      buildLinkedDocumentRows(selectedChild.id, documents, prescriptions, vaccinations, billing, filterType),
-    [selectedChild.id, documents, prescriptions, vaccinations, billing, filterType],
+      selectedChild
+        ? buildLinkedDocumentRows(selectedChild.id, documents, prescriptions, vaccinations, billing, filterType)
+        : [],
+    [selectedChild, documents, prescriptions, vaccinations, billing, filterType],
   );
+
+  if (!selectedChild) return <p className="text-muted-foreground text-center py-20">Please select or add a child first.</p>;
 
   const resetDialog = () => {
     setForm({ type: 'other', date: new Date().toISOString().split('T')[0] });
@@ -287,47 +293,21 @@ export default function Documents() {
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {mergedRows.map(row => {
-            const key =
-              row.kind === 'upload'
-                ? row.doc.id
-                : row.kind === 'prescription'
-                  ? `rx-img-${row.rx.id}`
-                  : row.kind === 'vaccination'
-                    ? `vax-card-${row.vax.id}`
-                    : `bill-rcpt-${row.bill.id}`;
-            const derived = row.kind === 'upload' ? null : rowPreview(row);
-            const title = row.kind === 'upload' ? row.doc.name : derived!.name;
-            const typeLabel =
-              row.kind === 'upload'
-                ? docTypes.find(t => t.value === row.doc.type)?.label
-                : row.kind === 'prescription'
-                  ? 'Prescription'
-                  : row.kind === 'vaccination'
-                    ? 'Vaccination Card'
-                    : 'Receipt';
-            const dateStr =
-              row.kind === 'upload'
-                ? row.doc.date
-                : row.kind === 'prescription'
-                  ? row.rx.date
-                  : row.kind === 'vaccination'
-                    ? row.vax.completedDate || row.vax.dueDate
-                    : row.bill.date;
-            const fileData = row.kind === 'upload' ? row.doc.fileData : derived!.fileData;
-            const fileType =
-              row.kind === 'upload' ? row.doc.fileType : imageMimeFromSrc(fileData);
+            const title = rowTitle(row);
+            const fileData = rowFileData(row);
+            const fileType = row.kind === 'upload' ? row.doc.fileType : imageMimeFromSrc(fileData);
             const notes = rowDisplayNotes(row);
             const showImage = fileType.startsWith('image/');
 
             return (
-              <Card key={key}>
+              <Card key={rowKey(row)}>
                 <CardHeader className="pb-2">
                   <CardTitle className="text-sm font-display flex items-center gap-2">
                     <FileText className="h-4 w-4 text-primary" /> {title}
                   </CardTitle>
                   <div className="flex items-center gap-2">
-                    <Badge variant="secondary">{typeLabel}</Badge>
-                    <span className="text-xs text-muted-foreground">{format(new Date(dateStr), 'PP')}</span>
+                    <Badge variant="secondary">{rowTypeLabel(row, docTypes)}</Badge>
+                    <span className="text-xs text-muted-foreground">{format(new Date(rowDate(row)), 'PP')}</span>
                   </div>
                 </CardHeader>
                 <CardContent>

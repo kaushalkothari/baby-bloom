@@ -6,7 +6,8 @@ export type LinkedDocumentRow =
   | { kind: 'vaccination'; vax: Vaccination }
   | { kind: 'billing'; bill: BillingRecord };
 
-function medsFromRx(rx: Prescription): Medicine[] {
+/** Resolves a prescription's medicines, falling back to legacy single-medicine columns. */
+export function medsFromRx(rx: Prescription): Medicine[] {
   if (rx.medicines && rx.medicines.length > 0) return rx.medicines;
   if (rx.medicineName) {
     return [{ id: 'legacy', name: rx.medicineName, dosage: rx.dosage || '', frequency: rx.frequency || '', duration: rx.duration || '' }];
@@ -43,11 +44,44 @@ export function imageMimeFromSrc(src: string): string {
   return 'image/jpeg';
 }
 
-function rowDate(row: LinkedDocumentRow): string {
+/** Stable React list key for a row. */
+export function rowKey(row: LinkedDocumentRow): string {
+  if (row.kind === 'upload') return row.doc.id;
+  if (row.kind === 'prescription') return `rx-img-${row.rx.id}`;
+  if (row.kind === 'vaccination') return `vax-card-${row.vax.id}`;
+  return `bill-rcpt-${row.bill.id}`;
+}
+
+/** Display title for a row (uploaded file name, or derived title for a linked image). */
+export function rowTitle(row: LinkedDocumentRow): string {
+  if (row.kind === 'upload') return row.doc.name;
+  if (row.kind === 'prescription') return prescriptionImageTitle(row.rx);
+  if (row.kind === 'vaccination') return vaccinationCardTitle(row.vax);
+  return billingReceiptTitle(row.bill);
+}
+
+/** Date shown next to a row (completedDate preferred for vaccinations, else scheduled due). */
+export function rowDate(row: LinkedDocumentRow): string {
   if (row.kind === 'upload') return row.doc.date;
   if (row.kind === 'prescription') return row.rx.date;
   if (row.kind === 'vaccination') return row.vax.completedDate || row.vax.dueDate;
   return row.bill.date;
+}
+
+/** Raw file data for a row (base64 / URL). */
+export function rowFileData(row: LinkedDocumentRow): string {
+  return row.kind === 'upload' ? row.doc.fileData : rowPreview(row).fileData;
+}
+
+/** Human-friendly type label; uploads resolve via caller-provided `docTypes` table. */
+export function rowTypeLabel(
+  row: LinkedDocumentRow,
+  docTypes: { value: string; label: string }[],
+): string | undefined {
+  if (row.kind === 'upload') return docTypes.find((t) => t.value === row.doc.type)?.label;
+  if (row.kind === 'prescription') return 'Prescription';
+  if (row.kind === 'vaccination') return 'Vaccination Card';
+  return 'Receipt';
 }
 
 function passesFilter(row: LinkedDocumentRow, filterType: string): boolean {

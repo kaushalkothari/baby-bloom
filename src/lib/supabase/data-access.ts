@@ -373,6 +373,14 @@ export async function deleteDocumentRow(client: Client, id: string): Promise<voi
   if (error) throw error;
 }
 
+type BillRow = Database['public']['Tables']['billing_records']['Row'];
+
+async function mapBillRowWithSignedReceipt(client: Client, data: BillRow): Promise<BillingRecord> {
+  if (!data.receipt_image_storage_path) return mapBillRow(data);
+  const url = await getSignedUrl(client, data.receipt_image_storage_path);
+  return mapBillRow(data, url);
+}
+
 export async function upsertBilling(client: Client, userId: string, b: BillingRecord): Promise<BillingRecord> {
   const { data: existing } = await client
     .from('billing_records')
@@ -400,23 +408,12 @@ export async function upsertBilling(client: Client, userId: string, b: BillingRe
     created_at: b.createdAt,
   };
 
-  if (existing) {
-    const { data, error } = await client.from('billing_records').update(row).eq('id', b.id).select('*').single();
-    if (error) throw error;
-    if (data.receipt_image_storage_path) {
-      const url = await getSignedUrl(client, data.receipt_image_storage_path);
-      return mapBillRow(data, url);
-    }
-    return mapBillRow(data);
-  }
-
-  const { data, error } = await client.from('billing_records').insert(row).select('*').single();
+  const query = existing
+    ? client.from('billing_records').update(row).eq('id', b.id)
+    : client.from('billing_records').insert(row);
+  const { data, error } = await query.select('*').single();
   if (error) throw error;
-  if (data.receipt_image_storage_path) {
-    const url = await getSignedUrl(client, data.receipt_image_storage_path);
-    return mapBillRow(data, url);
-  }
-  return mapBillRow(data);
+  return mapBillRowWithSignedReceipt(client, data);
 }
 
 export async function deleteBillingRow(client: Client, id: string): Promise<void> {

@@ -14,6 +14,7 @@ import { Prescription, Medicine } from '@/types';
 import { toast } from 'sonner';
 import { useFilePickerDialogGuard } from '@/hooks/useFilePickerDialogGuard';
 import { normalizeImageDataUrl } from '@/lib/imageUtils';
+import { medsFromRx } from '@/lib/documents/linkedDocuments';
 
 const emptyMedicine = (): Medicine => ({
   id: crypto.randomUUID(), name: '', dosage: '', frequency: '', duration: '',
@@ -27,14 +28,6 @@ const emptyRx = (): Partial<Prescription> & { medicines: Medicine[] } => ({
   notes: '',
   prescriptionImage: '',
 });
-
-function getMedicines(rx: Prescription): Medicine[] {
-  if (rx.medicines && rx.medicines.length > 0) return rx.medicines;
-  if (rx.medicineName) {
-    return [{ id: 'legacy', name: rx.medicineName, dosage: rx.dosage || '', frequency: rx.frequency || '', duration: rx.duration || '' }];
-  }
-  return [];
-}
 
 export default function Prescriptions() {
   const { selectedChild, prescriptions, addPrescription, updatePrescription, deletePrescription } = useApp();
@@ -125,7 +118,7 @@ export default function Prescriptions() {
 
   const openEditRx = (rx: Prescription) => {
     setEditing(rx);
-    setForm({ ...rx, medicines: getMedicines(rx) });
+    setForm({ ...rx, medicines: medsFromRx(rx) });
     setOpen(true);
   };
 
@@ -243,7 +236,7 @@ export default function Prescriptions() {
       ) : (
         <div className="space-y-4">
           {childRx.map(rx => {
-            const meds = getMedicines(rx);
+            const meds = medsFromRx(rx);
             return (
               <Card key={rx.id} className={!rx.active ? 'opacity-60' : ''}>
                 <CardHeader className="flex flex-row items-start justify-between pb-2">

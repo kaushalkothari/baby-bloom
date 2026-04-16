@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { ReactNode, useState } from 'react';
 import { useApp } from '@/lib/contexts/AppContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -25,12 +25,43 @@ type CompleteFormFields = {
   completedDate: string;
 };
 
+type CompleteContext = {
+  kind: 'scheduled';
+  vaccineName: string;
+  dueDate: string;
+  record?: Vaccination;
+};
+
+const AGE_BUCKET_LABELS: Record<number, string> = {
+  0: 'At birth',
+  6: '6 weeks',
+  10: '10 weeks',
+  14: '14 weeks',
+  39: '9–12 months',
+  68: '16–24 months',
+  260: '5–6 years',
+  520: '10 years',
+  832: '16 years',
+};
+
+function ageBucketLabel(ageInWeeks: number): string {
+  if (ageInWeeks in AGE_BUCKET_LABELS) return AGE_BUCKET_LABELS[ageInWeeks];
+  // Fallback for any new schedule items.
+  if (ageInWeeks < 52) return `${ageInWeeks} weeks`;
+  const years = Math.round((ageInWeeks / 52) * 10) / 10;
+  return `${years} years`;
+}
+
 function todayIsoDate() {
   return new Date().toISOString().split('T')[0];
 }
 
+function trimToOptional(s: string | undefined): string | undefined {
+  const t = s?.trim();
+  return t || undefined;
+}
+
 function prefillCompleteForm(record: Partial<Vaccination> | undefined): CompleteFormFields {
-  const today = todayIsoDate();
   return {
     location: record?.location?.trim() ?? '',
     administeredBy: record?.administeredBy?.trim() ?? '',
@@ -39,7 +70,7 @@ function prefillCompleteForm(record: Partial<Vaccination> | undefined): Complete
     manufacturingDate: record?.manufacturingDate ?? '',
     expiryDate: record?.expiryDate ?? '',
     administrationSite: record?.administrationSite?.trim() ?? '',
-    completedDate: today,
+    completedDate: todayIsoDate(),
   };
 }
 
@@ -48,16 +79,22 @@ function validateCompleteForm(f: CompleteFormFields): string | null {
   return null;
 }
 
-function trimToOptional(s: string): string | undefined {
-  const t = s.trim();
-  return t || undefined;
+function InfoRow({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <p>
+      <span className="text-muted-foreground">{label}:</span> {children}
+    </p>
+  );
 }
 
-type CompleteContext =
-  | { kind: 'scheduled'; vaccineName: string; dueDate: string; record?: Vaccination };
+function statusBadgeClass(status: VaccinationStatus): string {
+  if (status === 'completed') return 'bg-success text-success-foreground';
+  if (status === 'overdue') return 'bg-destructive text-destructive-foreground';
+  return 'bg-secondary text-secondary-foreground';
+}
 
 export default function Vaccinations() {
-  const { selectedChild, vaccinations, addVaccination, updateVaccination, deleteVaccination } = useApp();
+  const { selectedChild, vaccinations, addVaccination, updateVaccination } = useApp();
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState<Partial<Vaccination>>({});
   const [photoViewOpen, setPhotoViewOpen] = useState<string | null>(null);
@@ -70,7 +107,6 @@ export default function Vaccinations() {
   if (!selectedChild) return <p className="text-muted-foreground text-center py-20">Please select or add a child first.</p>;
 
   const childVax = vaccinations.filter(v => v.childId === selectedChild.id);
-  const scheduledNames = new Set(vaccineSchedule.map(vs => vs.name));
 
   const scheduleWithStatus = vaccineSchedule.map(vs => {
     const record = childVax.find(v => v.vaccineName === vs.name);
@@ -83,47 +119,19 @@ export default function Vaccinations() {
 
   type ScheduleRow = (typeof scheduleWithStatus)[number];
 
-  const ageBucketLabel = (ageInWeeks: number) => {
-    if (ageInWeeks === 0) return 'At birth';
-    if (ageInWeeks === 6) return '6 weeks';
-    if (ageInWeeks === 10) return '10 weeks';
-    if (ageInWeeks === 14) return '14 weeks';
-    if (ageInWeeks === 39) return '9–12 months';
-    if (ageInWeeks === 68) return '16–24 months';
-    if (ageInWeeks === 260) return '5–6 years';
-    if (ageInWeeks === 520) return '10 years';
-    if (ageInWeeks === 832) return '16 years';
-    // Fallback for any new schedule items.
-    if (ageInWeeks < 52) return `${ageInWeeks} weeks`;
-    const years = Math.round((ageInWeeks / 52) * 10) / 10;
-    return `${years} years`;
-  };
-
-  const groupOrder: number[] = Array.from(new Set(scheduleWithStatus.map(v => v.ageInWeeks))).sort((a, b) => a - b);
-  const grouped = groupOrder
+  const uniqueAges = Array.from(new Set(scheduleWithStatus.map(v => v.ageInWeeks))).sort((a, b) => a - b);
+  const grouped = uniqueAges
     .map((ageInWeeks) => {
-      const label = ageBucketLabel(ageInWeeks);
       const rows = scheduleWithStatus
         .filter((r) => r.ageInWeeks === ageInWeeks)
         .sort((a, b) => a.dueDate.localeCompare(b.dueDate));
-      const shown =
-        filter === 'all' ? rows : rows.filter((r) => r.status === filter);
-      return { ageInWeeks, label, rows, shown };
+      const shown = filter === 'all' ? rows : rows.filter((r) => r.status === filter);
+      return { ageInWeeks, label: ageBucketLabel(ageInWeeks), rows, shown };
     })
     // Hide empty sections when filtering.
-    .filter((g) => (filter === 'all' ? true : g.shown.length > 0));
+    .filter((g) => filter === 'all' || g.shown.length > 0);
 
-  type DisplayRow =
-    | { kind: 'scheduled'; vs: (typeof scheduleWithStatus)[number] };
-
-  const combinedRows: DisplayRow[] = scheduleWithStatus.map(vs => ({ kind: 'scheduled' as const, vs }));
-
-  const filtered =
-    filter === 'all'
-      ? combinedRows
-      : combinedRows.filter(row => row.vs.status === filter);
-
-  const openCompleteScheduled = (vs: (typeof scheduleWithStatus)[0]) => {
+  const openCompleteScheduled = (vs: ScheduleRow) => {
     setCompleteForm(prefillCompleteForm(vs.record));
     setCompleteContext({ kind: 'scheduled', vaccineName: vs.name, dueDate: vs.dueDate, record: vs.record });
     setCompleteOpen(true);
@@ -137,13 +145,13 @@ export default function Vaccinations() {
     }
     if (!completeContext) return;
     const details = {
-      completedDate: completeForm.completedDate.trim() || todayIsoDate(),
+      completedDate: trimToOptional(completeForm.completedDate) ?? todayIsoDate(),
       location: completeForm.location.trim(),
       administeredBy: trimToOptional(completeForm.administeredBy),
       vaccineManufacturer: trimToOptional(completeForm.vaccineManufacturer),
       batchNumber: trimToOptional(completeForm.batchNumber),
-      manufacturingDate: completeForm.manufacturingDate.trim() || undefined,
-      expiryDate: completeForm.expiryDate.trim() || undefined,
+      manufacturingDate: trimToOptional(completeForm.manufacturingDate),
+      expiryDate: trimToOptional(completeForm.expiryDate),
       administrationSite: trimToOptional(completeForm.administrationSite),
     };
     const { vaccineName, dueDate, record } = completeContext;
@@ -179,11 +187,6 @@ export default function Vaccinations() {
     setOpen(false);
     setForm({});
   };
-
-  const statusColor = (s: VaccinationStatus) =>
-    s === 'completed' ? 'bg-success text-success-foreground' :
-    s === 'overdue' ? 'bg-destructive text-destructive-foreground' :
-    'bg-secondary text-secondary-foreground';
 
   return (
     <div className="space-y-6">
@@ -277,11 +280,11 @@ export default function Vaccinations() {
 
       <div className="space-y-6">
         {grouped.map((g) => {
-          const total = g.rows.length;
-          const completed = g.rows.filter((r) => r.status === 'completed').length;
-          const overdue = g.rows.filter((r) => r.status === 'overdue').length;
-          const upcoming = g.rows.filter((r) => r.status === 'upcoming').length;
-          const shown = g.shown;
+          const counts = {
+            completed: g.rows.filter((r) => r.status === 'completed').length,
+            overdue: g.rows.filter((r) => r.status === 'overdue').length,
+            upcoming: g.rows.filter((r) => r.status === 'upcoming').length,
+          };
 
           return (
             <div key={g.ageInWeeks} className="space-y-3">
@@ -289,22 +292,25 @@ export default function Vaccinations() {
                 <div className="space-y-0.5">
                   <h2 className="text-lg font-display font-semibold">{g.label}</h2>
                   <p className="text-xs text-muted-foreground">
-                    {total} vaccines · {completed} completed · {overdue} overdue · {upcoming} upcoming
+                    {g.rows.length} vaccines · {counts.completed} completed · {counts.overdue} overdue · {counts.upcoming} upcoming
                   </p>
                 </div>
                 {filter !== 'all' && (
                   <Badge variant="outline" className="capitalize">
-                    Showing: {filter} ({shown.length})
+                    Showing: {filter} ({g.shown.length})
                   </Badge>
                 )}
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {shown.map((vs: ScheduleRow) => {
+                {g.shown.map((vs: ScheduleRow) => {
                   const isExpanded = expandedCard === vs.name;
                   const hasDetails = !!vs.remarks || (vs.sideEffects && vs.sideEffects.length > 0);
+                  const isCompleted = vs.status === 'completed';
+                  const record = vs.record;
+
                   return (
-                    <Card key={vs.name} className={vs.status === 'completed' ? 'opacity-75' : ''}>
+                    <Card key={vs.name} className={isCompleted ? 'opacity-75' : ''}>
                       <CardHeader className="flex flex-row items-center justify-between pb-2">
                         <div>
                           <CardTitle className="text-base font-display flex items-center gap-2">
@@ -312,40 +318,39 @@ export default function Vaccinations() {
                           </CardTitle>
                           <p className="text-xs text-muted-foreground mt-1">{vs.description}</p>
                         </div>
-                        <Badge className={statusColor(vs.status)}>{vs.status}</Badge>
+                        <Badge className={statusBadgeClass(vs.status)}>{vs.status}</Badge>
                       </CardHeader>
                       <CardContent className="space-y-2">
                         <div className="flex items-center justify-between">
                           <div className="text-sm space-y-1">
-                            <p><span className="text-muted-foreground">Due:</span> {format(new Date(vs.dueDate), 'PP')}</p>
-                            {vs.dose && <p><span className="text-muted-foreground">Dose:</span> {vs.dose}</p>}
-                            {vs.route && <p><span className="text-muted-foreground">Route:</span> {vs.route}</p>}
-                          {vs.record?.administrationSite
-                            ? <p><span className="text-muted-foreground">Site:</span> {vs.record.administrationSite}</p>
-                            : (vs.site && <p><span className="text-muted-foreground">Recommended site:</span> {vs.site}</p>)
-                          }
-                            {vs.record?.completedDate && <p><span className="text-muted-foreground">Done:</span> {format(new Date(vs.record.completedDate), 'PP')}</p>}
-                            {vs.record?.location && <p><span className="text-muted-foreground">Hospital:</span> {vs.record.location}</p>}
-                            {vs.record?.administeredBy && <p><span className="text-muted-foreground">By:</span> {vs.record.administeredBy}</p>}
-                            {vs.record?.vaccineManufacturer && <p><span className="text-muted-foreground">Company:</span> {vs.record.vaccineManufacturer}</p>}
-                            {vs.record?.batchNumber && <p><span className="text-muted-foreground">Batch:</span> {vs.record.batchNumber}</p>}
-                            {vs.record?.manufacturingDate && <p><span className="text-muted-foreground">Mfg:</span> {format(new Date(vs.record.manufacturingDate), 'PP')}</p>}
-                            {vs.record?.expiryDate && <p><span className="text-muted-foreground">Expiry:</span> {format(new Date(vs.record.expiryDate), 'PP')}</p>}
+                            <InfoRow label="Due">{format(new Date(vs.dueDate), 'PP')}</InfoRow>
+                            {vs.dose && <InfoRow label="Dose">{vs.dose}</InfoRow>}
+                            {vs.route && <InfoRow label="Route">{vs.route}</InfoRow>}
+                            {record?.administrationSite
+                              ? <InfoRow label="Site">{record.administrationSite}</InfoRow>
+                              : vs.site && <InfoRow label="Recommended site">{vs.site}</InfoRow>}
+                            {record?.completedDate && <InfoRow label="Done">{format(new Date(record.completedDate), 'PP')}</InfoRow>}
+                            {record?.location && <InfoRow label="Hospital">{record.location}</InfoRow>}
+                            {record?.administeredBy && <InfoRow label="By">{record.administeredBy}</InfoRow>}
+                            {record?.vaccineManufacturer && <InfoRow label="Company">{record.vaccineManufacturer}</InfoRow>}
+                            {record?.batchNumber && <InfoRow label="Batch">{record.batchNumber}</InfoRow>}
+                            {record?.manufacturingDate && <InfoRow label="Mfg">{format(new Date(record.manufacturingDate), 'PP')}</InfoRow>}
+                            {record?.expiryDate && <InfoRow label="Expiry">{format(new Date(record.expiryDate), 'PP')}</InfoRow>}
                           </div>
                           <div className="flex items-center gap-1">
-                            {vs.record?.cardPhoto && (
-                              <Button size="sm" variant="ghost" className="gap-1" onClick={() => setPhotoViewOpen(vs.record!.cardPhoto!)}>
+                            {record?.cardPhoto && (
+                              <Button size="sm" variant="ghost" className="gap-1" onClick={() => setPhotoViewOpen(record.cardPhoto!)}>
                                 <ImageIcon className="h-3 w-3" />
                               </Button>
                             )}
-                          <Button
-                            size="sm"
-                            variant={vs.status === 'completed' ? 'secondary' : 'outline'}
-                            className="gap-1"
-                            onClick={() => openCompleteScheduled(vs)}
-                          >
-                            <Check className="h-3 w-3" /> {vs.status === 'completed' ? 'Edit' : 'Done'}
-                          </Button>
+                            <Button
+                              size="sm"
+                              variant={isCompleted ? 'secondary' : 'outline'}
+                              className="gap-1"
+                              onClick={() => openCompleteScheduled(vs)}
+                            >
+                              <Check className="h-3 w-3" /> {isCompleted ? 'Edit' : 'Done'}
+                            </Button>
                           </div>
                         </div>
 
