@@ -133,8 +133,12 @@ const Auth = () => {
 
       <div className="w-full max-w-md relative z-10">
         <div className="flex flex-col items-center mb-8">
-          <div className="h-16 w-16 rounded-2xl bg-primary/10 flex items-center justify-center mb-4">
-            <Baby className="h-8 w-8 text-primary" />
+          <div className="h-16 w-16 rounded-2xl bg-primary/10 flex items-center justify-center mb-4 overflow-hidden">
+            <img
+              src="/babybloom_flower_512.png"
+              alt={`${APP_TITLE} logo`}
+              className="h-14 w-14 object-contain"
+            />
           </div>
           <h1 className="font-display text-2xl font-bold text-foreground">{APP_TITLE}</h1>
           <p className="text-muted-foreground text-sm mt-1 text-center max-w-xs">{APP_TAGLINE}</p>

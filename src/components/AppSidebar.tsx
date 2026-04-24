@@ -35,7 +35,11 @@ export function AppSidebar() {
     <Sidebar collapsible="icon">
       <SidebarHeader className="p-4">
         <div className="flex items-center gap-2" title={collapsed ? `${APP_TITLE} — ${APP_TAGLINE}` : undefined}>
-          <Baby className="h-6 w-6 text-primary shrink-0" aria-hidden />
+          <img
+            src="/babybloom_flower_512.png"
+            alt={`${APP_TITLE} logo`}
+            className="h-8 w-8 shrink-0 rounded-md object-contain"
+          />
           {!collapsed && (
             <div className="min-w-0 flex-1">
               <span className="font-display font-bold text-lg text-primary block leading-tight">{APP_TITLE}</span>
