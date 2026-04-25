@@ -16,6 +16,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Plus, Pill, Trash2, Pencil, Image, X } from 'lucide-react';
 import { format, startOfDay, isAfter, isBefore, subDays, startOfMonth, endOfMonth } from 'date-fns';
 import { DatePicker } from '@/components/ui/date-picker';
@@ -32,6 +33,128 @@ import { medsFromRx } from '@/lib/documents/linkedDocuments';
 import { useHighlightScroll } from '@/hooks/useHighlightParam';
 import { cn } from '@/lib/utils';
 
+const MED_META_SENTINEL = '\n__bb_meta__:';
+
+type TimesOfDay = 'morning' | 'afternoon' | 'night';
+type MealTiming = Medicine['mealTiming'];
+type Route = Medicine['route'];
+type DurationUnit = Medicine['durationUnit'];
+type DosageUnit = Medicine['dosageUnit'];
+
+function summarizeMedicine(med: Medicine): string {
+  const name = med.name?.trim() || 'New medicine';
+  const dosage = med.dosageValue != null && med.dosageUnit ? `${med.dosageValue} ${med.dosageUnit}` : '';
+  const dur = med.durationValue != null && med.durationUnit ? `${med.durationValue} ${med.durationUnit}` : '';
+  const bits = [dosage, dur].filter(Boolean).join(' · ');
+  return bits ? `${name} — ${bits}` : name;
+}
+
+function parseRxNotesToFields(notes: string | undefined): { chiefComplaint: string; condition: string } {
+  const raw = (notes ?? '').trim();
+  if (!raw) return { chiefComplaint: '', condition: '' };
+
+  // New format:
+  // Chief complaint: ...
+  // Condition: ...
+  const ccMatch = raw.match(/(?:^|\n)Chief complaint:\s*([\s\S]*?)(?=\nCondition:|$)/i);
+  const condMatch = raw.match(/(?:^|\n)Condition:\s*([\s\S]*?)$/i);
+  if (ccMatch || condMatch) {
+    return {
+      chiefComplaint: (ccMatch?.[1] ?? '').trim(),
+      condition: (condMatch?.[1] ?? '').trim(),
+    };
+  }
+
+  // Back-compat: treat old notes as chief complaint.
+  return { chiefComplaint: raw, condition: '' };
+}
+
+function buildRxNotesFromFields(chiefComplaint: string | undefined, condition: string | undefined): string {
+  const cc = chiefComplaint?.trim() || '';
+  const cond = condition?.trim() || '';
+  if (!cc && !cond) return '';
+  // Condition is no longer a separate UI field; keep parsing support for older notes,
+  // but only persist the chief complaint going forward.
+  return `Chief complaint: ${cc || cond}`;
+}
+
+function unpackMedicine(m: Medicine): Medicine {
+  const raw = m.duration || '';
+  const idx = raw.indexOf(MED_META_SENTINEL);
+  if (idx === -1) return m;
+  const displayDuration = raw.slice(0, idx).trim();
+  const metaRaw = raw.slice(idx + MED_META_SENTINEL.length).trim();
+  try {
+    const meta = JSON.parse(metaRaw) as Partial<Medicine>;
+    return { ...m, ...meta, duration: displayDuration, instructions: meta.instructions ?? m.instructions };
+  } catch {
+    return { ...m, duration: displayDuration };
+  }
+}
+
+function packMedicine(m: Medicine): Medicine {
+  const dosageMl = Number.isFinite(m.dosageMl) ? m.dosageMl : undefined;
+  const dosageValue = Number.isFinite(m.dosageValue) ? m.dosageValue : undefined;
+  const durationValue = Number.isFinite(m.durationValue) ? m.durationValue : undefined;
+  const timesOfDay = (m.timesOfDay ?? []).filter(Boolean) as TimesOfDay[];
+
+  const dosageUnit = m.dosageUnit;
+  const dosage =
+    dosageValue != null && dosageUnit
+      ? `${dosageValue} ${dosageUnit}`
+      : dosageMl != null
+        ? `${dosageMl} ml`
+        : (m.dosage ?? '');
+  const parts: string[] = [];
+  if (timesOfDay.length) parts.push(timesOfDay.map((t) => t[0].toUpperCase() + t.slice(1)).join(', '));
+  if (m.mealTiming) {
+    const mealLabel: Record<NonNullable<MealTiming>, string> = {
+      before_breakfast: 'Before breakfast',
+      after_breakfast: 'After breakfast',
+      before_food: 'Before food',
+      after_food: 'After food',
+      before_lunch: 'Before lunch',
+      after_lunch: 'After lunch',
+      before_dinner: 'Before dinner',
+      after_dinner: 'After dinner',
+    };
+    parts.push(mealLabel[m.mealTiming]);
+  }
+  if (m.route) parts.push(m.route.toUpperCase());
+  const frequency = parts.join(' · ') || (m.frequency ?? '');
+
+  const durationText =
+    durationValue != null && m.durationUnit
+      ? `${durationValue} ${m.durationUnit}`
+      : (m.duration ?? '');
+
+  const meta: Partial<Medicine> = {
+    dosageMl,
+    dosageValue,
+    dosageUnit,
+    timesOfDay,
+    mealTiming: m.mealTiming,
+    route: m.route,
+    durationValue,
+    durationUnit: m.durationUnit,
+    instructions: m.instructions?.trim() || undefined,
+  };
+
+  const storedDuration = `${durationText || ''}${MED_META_SENTINEL}${JSON.stringify(meta)}`;
+
+  return {
+    ...m,
+    dosage,
+    frequency,
+    duration: storedDuration,
+    instructions: meta.instructions,
+    dosageMl,
+    dosageValue,
+    timesOfDay,
+    durationValue,
+  };
+}
+
 const emptyMedicine = (): Medicine => ({
   id: crypto.randomUUID(), name: '', dosage: '', frequency: '', duration: '',
 });
@@ -41,6 +164,8 @@ const emptyRx = (): Partial<Prescription> & { medicines: Medicine[] } => ({
   prescribingDoctor: '',
   date: new Date().toISOString().split('T')[0],
   active: true,
+  chiefComplaint: '',
+  condition: '',
   notes: '',
   prescriptionImage: '',
 });
@@ -134,7 +259,11 @@ export default function Prescriptions() {
   const handleSave = () => {
     const validMeds = form.medicines.filter(m => m.name.trim());
     if (validMeds.length === 0) { toast.error('At least one medicine name is required.'); return; }
-    const rxData = { ...form, medicines: validMeds };
+    const rxData = {
+      ...form,
+      notes: buildRxNotesFromFields(form.chiefComplaint, form.condition),
+      medicines: validMeds.map((m) => packMedicine(m)),
+    };
     if (editing) {
       updatePrescription({ ...editing, ...rxData } as Prescription);
       toast.success('Updated!');
@@ -153,10 +282,10 @@ export default function Prescriptions() {
 
   const patchForm = (key: string, val: unknown) => setForm(p => ({ ...p, [key]: val }));
 
-  const updateMedicine = (idx: number, key: keyof Medicine, val: string) => {
-    setForm(p => {
+  const patchMedicine = (idx: number, patch: Partial<Medicine>) => {
+    setForm((p) => {
       const meds = [...p.medicines];
-      meds[idx] = { ...meds[idx], [key]: val };
+      meds[idx] = { ...meds[idx], ...patch };
       return { ...p, medicines: meds };
     });
   };
@@ -205,7 +334,12 @@ export default function Prescriptions() {
 
   const openEditRx = (rx: Prescription) => {
     setEditing(rx);
-    setForm({ ...rx, medicines: medsFromRx(rx) });
+    const fields = parseRxNotesToFields(rx.notes);
+    setForm({
+      ...rx,
+      ...fields,
+      medicines: medsFromRx(rx).map(unpackMedicine),
+    });
     setOpen(true);
   };
 
@@ -240,27 +374,208 @@ export default function Prescriptions() {
               {/* Medicines list */}
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
-                  <Label className="text-sm font-semibold">Medicines</Label>
+                  <Label className="text-sm font-semibold">Advice medications</Label>
                   <Button type="button" variant="outline" size="sm" onClick={addMedicine} className="gap-1">
                     <Plus className="h-3 w-3" /> Add Medicine
                   </Button>
                 </div>
-                {form.medicines.map((med, idx) => (
-                  <div key={med.id} className="rounded-lg border border-border p-3 space-y-2 relative bg-muted/30">
-                    {form.medicines.length > 1 && (
-                      <Button type="button" variant="ghost" size="icon" className="absolute top-1 right-1 h-6 w-6" onClick={() => removeMedicine(idx)}>
-                        <X className="h-3 w-3" />
-                      </Button>
-                    )}
-                    <div className="text-xs font-medium text-muted-foreground">Medicine {idx + 1}</div>
-                    <Input placeholder="Medicine name *" value={med.name} onChange={e => updateMedicine(idx, 'name', e.target.value)} />
-                    <div className="grid grid-cols-3 gap-2">
-                      <Input placeholder="Dosage" value={med.dosage} onChange={e => updateMedicine(idx, 'dosage', e.target.value)} />
-                      <Input placeholder="Frequency" value={med.frequency} onChange={e => updateMedicine(idx, 'frequency', e.target.value)} />
-                      <Input placeholder="Duration" value={med.duration} onChange={e => updateMedicine(idx, 'duration', e.target.value)} />
-                    </div>
-                  </div>
-                ))}
+                <Accordion
+                  type="multiple"
+                  className="space-y-2"
+                  defaultValue={form.medicines.length === 1 ? [`med-${form.medicines[0].id}`] : []}
+                >
+                  {form.medicines.map((med, idx) => {
+                    const itemValue = `med-${med.id}`;
+                    const timesCount = (med.timesOfDay ?? []).length;
+                    return (
+                      <AccordionItem key={med.id} value={itemValue} className="border rounded-lg bg-muted/20">
+                        <div className="flex items-start gap-3 px-3 py-2.5">
+                          <div className="min-w-0 flex-1">
+                            <AccordionTrigger className="py-0 hover:no-underline">
+                              <div className="min-w-0 text-left">
+                                <div className="text-xs font-medium text-muted-foreground">Medicine {idx + 1}</div>
+                                <div className="text-sm font-medium truncate">{summarizeMedicine(med)}</div>
+                              </div>
+                            </AccordionTrigger>
+                          </div>
+                          {form.medicines.length > 1 && (
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 shrink-0"
+                              onClick={() => removeMedicine(idx)}
+                              aria-label="Remove medicine"
+                            >
+                              <X className="h-4 w-4" />
+                            </Button>
+                          )}
+                        </div>
+
+                        <AccordionContent className="px-3 pb-3">
+                          <div className="space-y-3">
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                              <div className="sm:col-span-2 space-y-1.5">
+                                <Label className="text-xs text-muted-foreground">Drug name *</Label>
+                                <Input
+                                  placeholder="e.g. Crocin / Paracetamol"
+                                  value={med.name}
+                                  onChange={(e) => patchMedicine(idx, { name: e.target.value })}
+                                />
+                              </div>
+                              <div className="space-y-1.5">
+                                <Label className="text-xs text-muted-foreground">Dosage</Label>
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <Input
+                                    type="number"
+                                    inputMode="decimal"
+                                    step="0.1"
+                                    min={0}
+                                    value={med.dosageValue ?? ''}
+                                    onChange={(e) => patchMedicine(idx, { dosageValue: parseFloat(e.target.value) || 0 })}
+                                    className="w-20 shrink-0"
+                                  />
+                                  <select
+                                    className="h-10 min-w-0 flex-1 rounded-md border border-input bg-background px-3 text-sm text-foreground"
+                                    value={med.dosageUnit ?? ''}
+                                    onChange={(e) => patchMedicine(idx, { dosageUnit: (e.target.value || undefined) as DosageUnit })}
+                                  >
+                                    <option value="">—</option>
+                                    <option value="ml">ml</option>
+                                    <option value="drops">drops</option>
+                                    <option value="mg">mg</option>
+                                    <option value="g">g</option>
+                                    <option value="tsp">tsp</option>
+                                    <option value="tbsp">tbsp</option>
+                                    <option value="puffs">puffs</option>
+                                    <option value="tablets">tablets</option>
+                                    <option value="capsules">capsules</option>
+                                    <option value="units">units</option>
+                                    <option value="other">other</option>
+                                  </select>
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="space-y-1.5">
+                              <Label className="text-xs text-muted-foreground">When</Label>
+                              <div className="flex flex-wrap gap-2">
+                                {(['morning', 'afternoon', 'night'] as const).map((t) => {
+                                  const checked = (med.timesOfDay ?? []).includes(t);
+                                  return (
+                                    <Button
+                                      key={t}
+                                      type="button"
+                                      size="sm"
+                                      variant={checked ? 'default' : 'outline'}
+                                      className="capitalize h-8"
+                                      onClick={() => {
+                                        const next = new Set(med.timesOfDay ?? []);
+                                        if (checked) next.delete(t); else next.add(t);
+                                        const nextTimes = Array.from(next) as TimesOfDay[];
+                                        const isFoodTiming =
+                                          med.mealTiming === 'before_food' || med.mealTiming === 'after_food';
+                                        const shouldForceFoodTiming = nextTimes.length >= 2;
+                                        const shouldDisallowFoodTiming = nextTimes.length < 2;
+                                        patchMedicine(idx, {
+                                          timesOfDay: nextTimes,
+                                          ...(shouldDisallowFoodTiming && isFoodTiming ? { mealTiming: undefined } : {}),
+                                          ...(shouldForceFoodTiming && !isFoodTiming ? { mealTiming: undefined } : {}),
+                                        });
+                                      }}
+                                    >
+                                      {t}
+                                    </Button>
+                                  );
+                                })}
+                              </div>
+                            </div>
+
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                              <div className="space-y-1.5">
+                                <Label className="text-xs text-muted-foreground">Meal timing</Label>
+                                <select
+                                  className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground"
+                                  value={med.mealTiming ?? ''}
+                                  onChange={(e) => patchMedicine(idx, { mealTiming: (e.target.value || undefined) as MealTiming })}
+                                >
+                                  <option value="">—</option>
+                                  {timesCount >= 2 ? (
+                                    <>
+                                      <option value="before_food">Before food</option>
+                                      <option value="after_food">After food</option>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <option value="before_breakfast">Before breakfast</option>
+                                      <option value="after_breakfast">After breakfast</option>
+                                      <option value="before_lunch">Before lunch</option>
+                                      <option value="after_lunch">After lunch</option>
+                                      <option value="before_dinner">Before dinner</option>
+                                      <option value="after_dinner">After dinner</option>
+                                    </>
+                                  )}
+                                </select>
+                              </div>
+
+                              <div className="space-y-1.5">
+                                <Label className="text-xs text-muted-foreground">Route</Label>
+                                <select
+                                  className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground"
+                                  value={med.route ?? ''}
+                                  onChange={(e) => patchMedicine(idx, { route: (e.target.value || undefined) as Route })}
+                                >
+                                  <option value="">—</option>
+                                  <option value="oral">Oral</option>
+                                  <option value="iv">IV</option>
+                                  <option value="im">IM</option>
+                                  <option value="sc">SC</option>
+                                  <option value="inhalation">Inhalation</option>
+                                  <option value="topical">Topical</option>
+                                  <option value="other">Other</option>
+                                </select>
+                              </div>
+
+                              <div className="space-y-1.5">
+                                <Label className="text-xs text-muted-foreground">Duration</Label>
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <Input
+                                    type="number"
+                                    min={0}
+                                    step="1"
+                                    value={med.durationValue ?? ''}
+                                    onChange={(e) => patchMedicine(idx, { durationValue: parseInt(e.target.value, 10) || 0 })}
+                                    className="w-20 shrink-0"
+                                  />
+                                  <select
+                                    className="h-10 min-w-0 flex-1 rounded-md border border-input bg-background px-3 text-sm text-foreground"
+                                    value={med.durationUnit ?? ''}
+                                    onChange={(e) => patchMedicine(idx, { durationUnit: (e.target.value || undefined) as DurationUnit })}
+                                  >
+                                    <option value="">—</option>
+                                    <option value="days">Days</option>
+                                    <option value="weeks">Weeks</option>
+                                    <option value="months">Months</option>
+                                    <option value="years">Years</option>
+                                  </select>
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="space-y-1.5">
+                              <Label className="text-xs text-muted-foreground">Instructions</Label>
+                              <Input
+                                placeholder="e.g. If fever above 99°F"
+                                value={med.instructions ?? ''}
+                                onChange={(e) => patchMedicine(idx, { instructions: e.target.value })}
+                              />
+                            </div>
+                          </div>
+                        </AccordionContent>
+                      </AccordionItem>
+                    );
+                  })}
+                </Accordion>
               </div>
 
               <div><Label>Prescribing Doctor</Label><Input value={form.prescribingDoctor || ''} onChange={e => patchForm('prescribingDoctor', e.target.value)} /></div>
@@ -273,7 +588,14 @@ export default function Prescriptions() {
                   disabled={(d) => isAfter(startOfDay(d), startOfDay(new Date()))}
                 />
               </div>
-              <div><Label>Notes</Label><Textarea value={form.notes || ''} onChange={e => patchForm('notes', e.target.value)} /></div>
+              <div className="space-y-2">
+                <Label>Chief complaint / condition</Label>
+                <Textarea
+                  value={form.chiefComplaint || ''}
+                  onChange={(e) => patchForm('chiefComplaint', e.target.value)}
+                  placeholder="e.g. Fever since 1 day, cold"
+                />
+              </div>
 
               {/* Prescription Image — hidden input + preview */}
               <div className="space-y-2">
@@ -394,6 +716,10 @@ export default function Prescriptions() {
         <div className="relative space-y-4">
           {childRx.map(rx => {
             const meds = medsFromRx(rx);
+            const { chiefComplaint } = parseRxNotesToFields(rx.notes);
+            const cardTitle =
+              chiefComplaint.trim() ||
+              (meds.length === 1 ? meds[0].name : `${meds.length} Medicines`);
             return (
               <Card
                 key={rx.id}
@@ -408,10 +734,14 @@ export default function Prescriptions() {
                   <div className="min-w-0 flex-1">
                     <CardTitle className="text-base font-display flex flex-wrap items-center gap-2">
                       <Pill className="h-4 w-4 text-primary" />
-                      {meds.length === 1 ? meds[0].name : `${meds.length} Medicines`}
+                      <span className="min-w-0 truncate">{cardTitle}</span>
                       <Badge variant={rx.active ? 'default' : 'secondary'}>{rx.active ? 'Active' : 'Completed'}</Badge>
                     </CardTitle>
-                    {meds.length === 1 ? (
+                    {chiefComplaint.trim() ? (
+                      <p className="text-sm text-muted-foreground">
+                        {meds.length === 1 ? meds[0].name : `${meds.length} medicines`}
+                      </p>
+                    ) : meds.length === 1 ? (
                       <p className="text-sm text-muted-foreground">{meds[0].dosage} · {meds[0].frequency} · {meds[0].duration}</p>
                     ) : (
                       <div className="mt-1 space-y-0.5">
@@ -488,32 +818,64 @@ export default function Prescriptions() {
                 </DialogHeader>
               </div>
               <div className="space-y-4 px-6 py-4">
-                <div className="space-y-3">
-                  <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                    Medicines
-                  </h3>
-                  <ul className="space-y-3">
-                    {detailMeds.map((m) => (
-                      <li
-                        key={m.id}
-                        className="rounded-lg border border-border bg-card px-3 py-2.5 text-sm"
-                      >
-                        <p className="font-medium text-foreground">{m.name}</p>
-                        <p className="mt-1 text-muted-foreground text-xs sm:text-sm">
-                          {m.dosage} · {m.frequency} · {m.duration}
-                        </p>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-                {detailRx.notes?.trim() && (
-                  <div className="space-y-1.5">
-                    <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                      Notes
-                    </h3>
-                    <p className="text-sm text-muted-foreground whitespace-pre-wrap">{detailRx.notes.trim()}</p>
-                  </div>
-                )}
+                {(() => {
+                  const fields = parseRxNotesToFields(detailRx.notes);
+                  const chief = fields.chiefComplaint;
+                  const cond = fields.condition;
+                  return (
+                    <>
+                      {(chief || cond) && (
+                        <div className="space-y-3">
+                          <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                            Chief complaint / condition
+                          </h3>
+                          <div className="rounded-lg border border-border bg-card p-4 space-y-2">
+                            {chief && (
+                              <div className="text-sm">
+                                <p className="text-xs font-semibold text-muted-foreground">Chief complaint</p>
+                                <p className="text-muted-foreground whitespace-pre-wrap">{chief}</p>
+                              </div>
+                            )}
+                            {/* Keep showing parsed condition from older notes, but don't require a separate field in the form. */}
+                            {cond && !chief && (
+                              <div className="text-sm">
+                                <p className="text-xs font-semibold text-muted-foreground">Chief complaint</p>
+                                <p className="text-muted-foreground whitespace-pre-wrap">{cond}</p>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+
+                      <div className="space-y-3">
+                        <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                          Advice medications
+                        </h3>
+                        <div className="rounded-lg border border-border overflow-hidden">
+                          <div className="grid grid-cols-12 gap-2 bg-muted/40 px-3 py-2 text-[11px] font-semibold text-muted-foreground">
+                            <div className="col-span-4">Drug name</div>
+                            <div className="col-span-5">Prescription details</div>
+                            <div className="col-span-3">Instruction</div>
+                          </div>
+                          <div className="divide-y divide-border">
+                            {detailMeds.map((m) => (
+                              <div key={m.id} className="grid grid-cols-12 gap-2 px-3 py-2 text-sm">
+                                <div className="col-span-4 font-medium break-words">{m.name}</div>
+                                <div className="col-span-5 text-muted-foreground">
+                                  {[m.dosage, m.frequency, m.duration].filter(Boolean).join(' · ') || '—'}
+                                </div>
+                                <div className="col-span-3 text-muted-foreground break-words">
+                                  {m.instructions?.trim() || '—'}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    </>
+                  );
+                })()}
+
                 {detailRx.prescriptionImage && (
                   <div className="space-y-2">
                     <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">

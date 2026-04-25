@@ -6,9 +6,30 @@ export type LinkedDocumentRow =
   | { kind: 'vaccination'; vax: Vaccination }
   | { kind: 'billing'; bill: BillingRecord };
 
+const MED_META_SENTINEL = '\n__bb_meta__:';
+
+function stripMedMeta(m: Medicine): Medicine {
+  const raw = m.duration || '';
+  const idx = raw.indexOf(MED_META_SENTINEL);
+  if (idx === -1) return m;
+  const displayDuration = raw.slice(0, idx).trim();
+  const metaRaw = raw.slice(idx + MED_META_SENTINEL.length).trim();
+  try {
+    const meta = JSON.parse(metaRaw) as Partial<Medicine>;
+    return {
+      ...m,
+      ...meta,
+      duration: displayDuration,
+      instructions: meta.instructions ?? m.instructions,
+    };
+  } catch {
+    return { ...m, duration: displayDuration };
+  }
+}
+
 /** Resolves a prescription's medicines, falling back to legacy single-medicine columns. */
 export function medsFromRx(rx: Prescription): Medicine[] {
-  if (rx.medicines && rx.medicines.length > 0) return rx.medicines;
+  if (rx.medicines && rx.medicines.length > 0) return rx.medicines.map(stripMedMeta);
   if (rx.medicineName) {
     return [{ id: 'legacy', name: rx.medicineName, dosage: rx.dosage || '', frequency: rx.frequency || '', duration: rx.duration || '' }];
   }

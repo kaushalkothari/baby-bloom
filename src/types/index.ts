@@ -57,6 +57,24 @@ export interface Medicine {
   dosage: string;
   frequency: string;
   duration: string;
+  /** Optional structured fields (stored client-side; may be encoded in `duration`). */
+  dosageMl?: number;
+  dosageValue?: number;
+  dosageUnit?: 'ml' | 'drops' | 'mg' | 'g' | 'tsp' | 'tbsp' | 'puffs' | 'tablets' | 'capsules' | 'units' | 'other';
+  timesOfDay?: Array<'morning' | 'afternoon' | 'night'>;
+  mealTiming?:
+    | 'before_breakfast'
+    | 'after_breakfast'
+    | 'before_food'
+    | 'after_food'
+    | 'before_lunch'
+    | 'after_lunch'
+    | 'before_dinner'
+    | 'after_dinner';
+  route?: 'oral' | 'iv' | 'im' | 'sc' | 'inhalation' | 'topical' | 'other';
+  durationValue?: number;
+  durationUnit?: 'days' | 'weeks' | 'months' | 'years';
+  instructions?: string;
 }
 
 export interface Prescription {
@@ -73,6 +91,9 @@ export interface Prescription {
   prescribingDoctor: string;
   date: string;
   active: boolean;
+  /** New UI fields (stored in `notes` as text for backward compat). */
+  chiefComplaint?: string;
+  condition?: string;
   notes?: string;
   prescriptionImage?: string; // base64 image
   createdAt: string;

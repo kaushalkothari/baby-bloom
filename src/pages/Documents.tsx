@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
 import { Plus, FileText, Trash2, Download, Eye, Image } from 'lucide-react';
-import { format, startOfDay, isAfter } from 'date-fns';
+import { format, startOfDay, isAfter, isBefore, subDays, startOfMonth, endOfMonth } from 'date-fns';
 import { DatePicker } from '@/components/ui/date-picker';
 import { Document as DocType } from '@/types';
 import { toast } from 'sonner';
@@ -72,6 +72,8 @@ export default function Documents() {
   const [form, setForm] = useState<Partial<DocType>>({ type: 'other', date: new Date().toISOString().split('T')[0] });
   const [preview, setPreview] = useState<{ name: string; fileData: string } | null>(null);
   const [filterType, setFilterType] = useState<string>('all');
+  const [dateFrom, setDateFrom] = useState<string>('');
+  const [dateTo, setDateTo] = useState<string>('');
   const fileRef = useRef<HTMLInputElement>(null);
   const [pickedFile, setPickedFile] = useState<PickedFile | null>(null);
   const { pickingFile, beforePick, afterPick } = useFilePickerDialogGuard();
@@ -81,8 +83,20 @@ export default function Documents() {
     () =>
       selectedChild
         ? buildLinkedDocumentRows(selectedChild.id, documents, prescriptions, vaccinations, billing, filterType)
+          .slice()
+          .filter((r) => {
+            const from = dateFrom?.trim() || '';
+            const to = dateTo?.trim() || '';
+            const rangeStart = from && to && from > to ? to : from;
+            const rangeEnd = from && to && from > to ? from : to;
+            const d = rowDate(r);
+            if (rangeStart && d < rangeStart) return false;
+            if (rangeEnd && d > rangeEnd) return false;
+            return true;
+          })
+          .sort((a, b) => new Date(rowDate(b)).getTime() - new Date(rowDate(a)).getTime())
         : [],
-    [selectedChild, documents, prescriptions, vaccinations, billing, filterType],
+    [selectedChild, documents, prescriptions, vaccinations, billing, filterType, dateFrom, dateTo],
   );
 
   useEffect(() => {
@@ -371,6 +385,75 @@ export default function Documents() {
         {docTypes.map(t => (
           <Button key={t.value} variant={filterType === t.value ? 'default' : 'outline'} size="sm" onClick={() => setFilterType(t.value)}>{t.label}</Button>
         ))}
+      </div>
+
+      <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
+        <div className="flex flex-wrap items-end gap-2">
+          {(() => {
+            const today = startOfDay(new Date());
+            const setRange = (from: Date, to: Date) => {
+              const a = startOfDay(from);
+              const b = startOfDay(to);
+              const start = isBefore(a, b) ? a : b;
+              const end = isBefore(a, b) ? b : a;
+              setDateFrom(format(start, 'yyyy-MM-dd'));
+              setDateTo(format(end, 'yyyy-MM-dd'));
+            };
+            return (
+              <>
+                <Button type="button" variant="outline" size="sm" onClick={() => setRange(today, today)}>
+                  Today
+                </Button>
+                <Button type="button" variant="outline" size="sm" onClick={() => setRange(subDays(today, 6), today)}>
+                  Last 7 days
+                </Button>
+                <Button type="button" variant="outline" size="sm" onClick={() => setRange(subDays(today, 29), today)}>
+                  Last 30 days
+                </Button>
+                <Button type="button" variant="outline" size="sm" onClick={() => setRange(startOfMonth(today), endOfMonth(today))}>
+                  This month
+                </Button>
+                {(dateFrom || dateTo) && (
+                  <Button type="button" variant="ghost" size="sm" onClick={() => { setDateFrom(''); setDateTo(''); }}>
+                    Clear dates
+                  </Button>
+                )}
+              </>
+            );
+          })()}
+        </div>
+        <div className="w-full sm:w-auto sm:min-w-[220px]">
+          <Label htmlFor="doc-date-from" className="text-xs text-muted-foreground">From</Label>
+          <DatePicker
+            id="doc-date-from"
+            value={dateFrom}
+            onChange={setDateFrom}
+            allowClear
+            disabled={(d) => {
+              const today = startOfDay(new Date());
+              const day = startOfDay(d);
+              if (isAfter(day, today)) return true;
+              if (dateTo) return isAfter(day, startOfDay(new Date(dateTo)));
+              return false;
+            }}
+          />
+        </div>
+        <div className="w-full sm:w-auto sm:min-w-[220px]">
+          <Label htmlFor="doc-date-to" className="text-xs text-muted-foreground">To</Label>
+          <DatePicker
+            id="doc-date-to"
+            value={dateTo}
+            onChange={setDateTo}
+            allowClear
+            disabled={(d) => {
+              const today = startOfDay(new Date());
+              const day = startOfDay(d);
+              if (isAfter(day, today)) return true;
+              if (dateFrom) return isBefore(day, startOfDay(new Date(dateFrom)));
+              return false;
+            }}
+          />
+        </div>
       </div>
 
       {mergedRows.length === 0 ? (
