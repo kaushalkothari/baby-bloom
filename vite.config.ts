@@ -9,6 +9,10 @@ const securityHeaders = {
 } as const;
 
 export default defineConfig({
+  build: {
+    // Suppress "chunks are larger than 500 kB" warning for this app bundle.
+    chunkSizeWarningLimit: 4000,
+  },
   server: {
     // Avoid host "::" — on some systems/environments `os.networkInterfaces()` fails and Vite crashes on startup.
     host: "localhost",

@@ -1,9 +1,8 @@
 import {
   Baby, LayoutDashboard, Stethoscope, TrendingUp,
-  Syringe, Pill, FileText, ReceiptIndianRupee, Users, LogOut,
+  Syringe, Pill, FileText, ReceiptIndianRupee, Users,
 } from 'lucide-react';
 import { NavLink } from '@/components/NavLink';
-import { useNavigate } from 'react-router-dom';
 import { useApp } from '@/lib/contexts/AppContext';
 import {
   Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent,
@@ -28,8 +27,7 @@ const navItems = [
 export function AppSidebar() {
   const { state } = useSidebar();
   const collapsed = state === 'collapsed';
-  const navigate = useNavigate();
-  const { children, selectedChildId, setSelectedChildId, usesRemoteData, signOut } = useApp();
+  const { children, selectedChildId, setSelectedChildId } = useApp();
 
   return (
     <Sidebar collapsible="icon">
@@ -90,27 +88,6 @@ export function AppSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
 
-        {usesRemoteData && (
-          <SidebarGroup>
-            <SidebarGroupLabel>Account</SidebarGroupLabel>
-            <SidebarGroupContent>
-              <SidebarMenu>
-                <SidebarMenuItem>
-                  <SidebarMenuButton
-                    type="button"
-                    onClick={async () => {
-                      await signOut();
-                      navigate('/login', { replace: true });
-                    }}
-                  >
-                    <LogOut className="h-4 w-4 mr-2 shrink-0" />
-                    {!collapsed && <span>Sign out</span>}
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              </SidebarMenu>
-            </SidebarGroupContent>
-          </SidebarGroup>
-        )}
       </SidebarContent>
 
     </Sidebar>

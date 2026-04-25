@@ -8,8 +8,23 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { Textarea } from '@/components/ui/textarea';
-import { Plus, FileText, Trash2, Download, Eye, Image } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
+import {
+  Plus,
+  FileText,
+  Trash2,
+  Download,
+  Eye,
+  Image,
+  ReceiptIndianRupee,
+  Pill,
+  Syringe,
+  FlaskConical,
+  ClipboardList,
+  FolderOpen,
+} from 'lucide-react';
 import { format, startOfDay, isAfter, isBefore, subDays, startOfMonth, endOfMonth } from 'date-fns';
 import { DatePicker } from '@/components/ui/date-picker';
 import { Document as DocType } from '@/types';
@@ -44,6 +59,27 @@ const docTypes = [
   { value: 'vaccination_card', label: 'Vaccination Card' },
   { value: 'other', label: 'Other' },
 ];
+
+function documentRowIcon(row: LinkedDocumentRow): LucideIcon {
+  if (row.kind === 'prescription') return Pill;
+  if (row.kind === 'vaccination') return Syringe;
+  if (row.kind === 'billing') return ReceiptIndianRupee;
+  switch (row.doc.type) {
+    case 'receipt':
+      return ReceiptIndianRupee;
+    case 'lab_report':
+      return FlaskConical;
+    case 'discharge_summary':
+      return ClipboardList;
+    case 'prescription':
+      return Pill;
+    case 'vaccination_card':
+      return Syringe;
+    case 'other':
+    default:
+      return FolderOpen;
+  }
+}
 
 interface PickedFile {
   data: string;
@@ -379,81 +415,107 @@ export default function Documents() {
         </Dialog>
       </div>
 
-      <div className="flex items-center gap-2 flex-wrap">
-        <span className="text-sm text-muted-foreground">Filter:</span>
-        <Button variant={filterType === 'all' ? 'default' : 'outline'} size="sm" onClick={() => setFilterType('all')}>All</Button>
-        {docTypes.map(t => (
-          <Button key={t.value} variant={filterType === t.value ? 'default' : 'outline'} size="sm" onClick={() => setFilterType(t.value)}>{t.label}</Button>
-        ))}
-      </div>
-
-      <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
-        <div className="flex flex-wrap items-end gap-2">
-          {(() => {
-            const today = startOfDay(new Date());
-            const setRange = (from: Date, to: Date) => {
-              const a = startOfDay(from);
-              const b = startOfDay(to);
-              const start = isBefore(a, b) ? a : b;
-              const end = isBefore(a, b) ? b : a;
-              setDateFrom(format(start, 'yyyy-MM-dd'));
-              setDateTo(format(end, 'yyyy-MM-dd'));
-            };
-            return (
-              <>
-                <Button type="button" variant="outline" size="sm" onClick={() => setRange(today, today)}>
-                  Today
-                </Button>
-                <Button type="button" variant="outline" size="sm" onClick={() => setRange(subDays(today, 6), today)}>
-                  Last 7 days
-                </Button>
-                <Button type="button" variant="outline" size="sm" onClick={() => setRange(subDays(today, 29), today)}>
-                  Last 30 days
-                </Button>
-                <Button type="button" variant="outline" size="sm" onClick={() => setRange(startOfMonth(today), endOfMonth(today))}>
-                  This month
-                </Button>
-                {(dateFrom || dateTo) && (
-                  <Button type="button" variant="ghost" size="sm" onClick={() => { setDateFrom(''); setDateTo(''); }}>
-                    Clear dates
+      <div className="sticky top-0 z-20 -mx-1 px-1 bg-background/75 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+        <Card className="border-border/60 shadow-sm">
+          <CardContent className="pt-4 space-y-4">
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-muted-foreground shrink-0">Filter:</span>
+              <div className="flex-1 overflow-x-auto [-webkit-overflow-scrolling:touch]">
+                <div className="flex items-center gap-2 min-w-max pr-1">
+                  <Button
+                    variant={filterType === 'all' ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => setFilterType('all')}
+                  >
+                    All
                   </Button>
-                )}
-              </>
-            );
-          })()}
-        </div>
-        <div className="w-full sm:w-auto sm:min-w-[220px]">
-          <Label htmlFor="doc-date-from" className="text-xs text-muted-foreground">From</Label>
-          <DatePicker
-            id="doc-date-from"
-            value={dateFrom}
-            onChange={setDateFrom}
-            allowClear
-            disabled={(d) => {
-              const today = startOfDay(new Date());
-              const day = startOfDay(d);
-              if (isAfter(day, today)) return true;
-              if (dateTo) return isAfter(day, startOfDay(new Date(dateTo)));
-              return false;
-            }}
-          />
-        </div>
-        <div className="w-full sm:w-auto sm:min-w-[220px]">
-          <Label htmlFor="doc-date-to" className="text-xs text-muted-foreground">To</Label>
-          <DatePicker
-            id="doc-date-to"
-            value={dateTo}
-            onChange={setDateTo}
-            allowClear
-            disabled={(d) => {
-              const today = startOfDay(new Date());
-              const day = startOfDay(d);
-              if (isAfter(day, today)) return true;
-              if (dateFrom) return isBefore(day, startOfDay(new Date(dateFrom)));
-              return false;
-            }}
-          />
-        </div>
+                  {docTypes.map((t) => (
+                    <Button
+                      key={t.value}
+                      variant={filterType === t.value ? 'default' : 'outline'}
+                      size="sm"
+                      onClick={() => setFilterType(t.value)}
+                    >
+                      {t.label}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
+              <div className="flex-1 overflow-x-auto [-webkit-overflow-scrolling:touch]">
+                <div className="flex items-end gap-2 min-w-max pr-1">
+                  {(() => {
+                    const today = startOfDay(new Date());
+                    const setRange = (from: Date, to: Date) => {
+                      const a = startOfDay(from);
+                      const b = startOfDay(to);
+                      const start = isBefore(a, b) ? a : b;
+                      const end = isBefore(a, b) ? b : a;
+                      setDateFrom(format(start, 'yyyy-MM-dd'));
+                      setDateTo(format(end, 'yyyy-MM-dd'));
+                    };
+                    return (
+                      <>
+                        <Button type="button" variant="outline" size="sm" onClick={() => setRange(today, today)}>
+                          Today
+                        </Button>
+                        <Button type="button" variant="outline" size="sm" onClick={() => setRange(subDays(today, 6), today)}>
+                          Last 7 days
+                        </Button>
+                        <Button type="button" variant="outline" size="sm" onClick={() => setRange(subDays(today, 29), today)}>
+                          Last 30 days
+                        </Button>
+                        <Button type="button" variant="outline" size="sm" onClick={() => setRange(startOfMonth(today), endOfMonth(today))}>
+                          This month
+                        </Button>
+                        {(dateFrom || dateTo) && (
+                          <Button type="button" variant="ghost" size="sm" onClick={() => { setDateFrom(''); setDateTo(''); }}>
+                            Clear dates
+                          </Button>
+                        )}
+                      </>
+                    );
+                  })()}
+                </div>
+              </div>
+
+              <div className="w-full sm:w-auto sm:min-w-[220px]">
+                <Label htmlFor="doc-date-from" className="text-xs text-muted-foreground">From</Label>
+                <DatePicker
+                  id="doc-date-from"
+                  value={dateFrom}
+                  onChange={setDateFrom}
+                  allowClear
+                  disabled={(d) => {
+                    const today = startOfDay(new Date());
+                    const day = startOfDay(d);
+                    if (isAfter(day, today)) return true;
+                    if (dateTo) return isAfter(day, startOfDay(new Date(dateTo)));
+                    return false;
+                  }}
+                />
+              </div>
+              <div className="w-full sm:w-auto sm:min-w-[220px]">
+                <Label htmlFor="doc-date-to" className="text-xs text-muted-foreground">To</Label>
+                <DatePicker
+                  id="doc-date-to"
+                  value={dateTo}
+                  onChange={setDateTo}
+                  allowClear
+                  disabled={(d) => {
+                    const today = startOfDay(new Date());
+                    const day = startOfDay(d);
+                    if (isAfter(day, today)) return true;
+                    if (dateFrom) return isBefore(day, startOfDay(new Date(dateFrom)));
+                    return false;
+                  }}
+                />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
       {mergedRows.length === 0 ? (
@@ -471,45 +533,93 @@ export default function Documents() {
             const notes = rowDisplayNotes(row);
             const showImage = fileType.startsWith('image/');
             const isFocused = focusedDocKey === rk;
+            const RowIcon = documentRowIcon(row);
 
             return (
               <Card
                 key={rk}
                 id={`doc-${rk}`}
                 className={cn(
-                  'cursor-pointer transition-[box-shadow,transform] duration-200',
+                  'cursor-pointer transition-[box-shadow,transform] duration-200 hover:shadow-md',
                   isFocused && 'relative z-10 scale-[1.01] shadow-lg ring-2 ring-primary ring-offset-2 ring-offset-background',
                 )}
                 onClick={() => setFocusedDocKey((cur) => (cur === rk ? null : rk))}
               >
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-sm font-display flex items-center gap-2">
-                    <FileText className="h-4 w-4 text-primary" /> {title}
-                  </CardTitle>
+                <CardHeader className="pb-2 space-y-2">
+                  <div className="flex items-start justify-between gap-3">
+                    <CardTitle className="text-sm font-display flex items-center gap-2 min-w-0">
+                      <RowIcon className="h-4 w-4 text-primary shrink-0" aria-hidden />
+                      <span className="truncate">{title}</span>
+                    </CardTitle>
+                    <span className="text-xs text-muted-foreground shrink-0">
+                      {format(new Date(rowDate(row)), 'PP')}
+                    </span>
+                  </div>
                   <div className="flex items-center gap-2">
                     <Badge variant="secondary">{rowTypeLabel(row, docTypes)}</Badge>
-                    <span className="text-xs text-muted-foreground">{format(new Date(rowDate(row)), 'PP')}</span>
                   </div>
                 </CardHeader>
-                <CardContent>
-                  {notes && <p className="text-xs text-muted-foreground mb-2">{notes}</p>}
-                  <div className="flex gap-2 flex-wrap" onClick={(e) => e.stopPropagation()}>
-                    {showImage && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="gap-1"
-                        onClick={() => setPreview({ name: title, fileData })}
-                      >
-                        <Eye className="h-3 w-3" /> {row.kind === 'prescription' ? 'View image' : 'View'}
-                      </Button>
+                <CardContent className="pt-0">
+                  {notes && (
+                    <p className="text-xs text-muted-foreground mb-3 line-clamp-2">
+                      {notes}
+                    </p>
+                  )}
+                  <div
+                    className={cn(
+                      'mt-2 flex items-center justify-end gap-1.5 pt-2',
+                      notes && 'border-t border-border/60',
                     )}
-                    <Button variant="outline" size="sm" className="gap-1" onClick={() => downloadFile(title, fileData)}>
-                      <Download className="h-3 w-3" /> Download
-                    </Button>
-                    <Button variant="ghost" size="sm" onClick={() => handleDeleteRow(row)}>
-                      <Trash2 className="h-3 w-3 text-destructive" />
-                    </Button>
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    {showImage && (
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            variant="outline"
+                            size="icon"
+                            className="h-9 w-9"
+                            aria-label={row.kind === 'prescription' ? 'View image' : 'View'}
+                            onClick={() => setPreview({ name: title, fileData })}
+                          >
+                            <Eye className="h-4 w-4" />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          {row.kind === 'prescription' ? 'View image' : 'View'}
+                        </TooltipContent>
+                      </Tooltip>
+                    )}
+
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          className="h-9 w-9"
+                          aria-label="Download"
+                          onClick={() => downloadFile(title, fileData)}
+                        >
+                          <Download className="h-4 w-4" />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>Download</TooltipContent>
+                    </Tooltip>
+
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-9 w-9"
+                          aria-label="Delete"
+                          onClick={() => handleDeleteRow(row)}
+                        >
+                          <Trash2 className="h-4 w-4 text-destructive" />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>Delete</TooltipContent>
+                    </Tooltip>
                   </div>
                 </CardContent>
               </Card>

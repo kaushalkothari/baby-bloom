@@ -244,11 +244,13 @@ export default function Prescriptions() {
 
   const detailRx = detailRxId ? childRx.find((p) => p.id === detailRxId) ?? null : null;
   const detailMeds = detailRx ? medsFromRx(detailRx) : [];
-  const detailTitle = detailRx
-    ? detailMeds.length === 1
-      ? detailMeds[0].name
-      : `${detailMeds.length} medicines`
-    : '';
+  const detailTitle = (() => {
+    if (!detailRx) return '';
+    const { chiefComplaint } = parseRxNotesToFields(detailRx.notes);
+    if (chiefComplaint.trim()) return chiefComplaint.trim();
+    if (detailMeds.length === 1 && detailMeds[0].name?.trim()) return detailMeds[0].name.trim();
+    return 'Prescription';
+  })();
 
   const resetDialog = () => {
     setEditing(null);
@@ -822,6 +824,37 @@ export default function Prescriptions() {
                   const fields = parseRxNotesToFields(detailRx.notes);
                   const chief = fields.chiefComplaint;
                   const cond = fields.condition;
+                  const mealLabel: Record<
+                    NonNullable<MealTiming>,
+                    string
+                  > = {
+                    before_breakfast: 'Before breakfast',
+                    after_breakfast: 'After breakfast',
+                    before_food: 'Before food',
+                    after_food: 'After food',
+                    before_lunch: 'Before lunch',
+                    after_lunch: 'After lunch',
+                    before_dinner: 'Before dinner',
+                    after_dinner: 'After dinner',
+                  };
+                  const routeLabel: Record<NonNullable<Route>, string> = {
+                    oral: 'Oral',
+                    iv: 'IV',
+                    im: 'IM',
+                    sc: 'SC',
+                    inhalation: 'Inhalation',
+                    topical: 'Topical',
+                    other: 'Other',
+                  };
+                  const timesLabel = (times: Array<TimesOfDay> | undefined) => {
+                    const t = (times ?? []).filter(Boolean);
+                    if (!t.length) return '';
+                    const order: TimesOfDay[] = ['morning', 'afternoon', 'night'];
+                    return order
+                      .filter((k) => t.includes(k))
+                      .map((k) => k[0].toUpperCase() + k.slice(1))
+                      .join(', ');
+                  };
                   return (
                     <>
                       {(chief || cond) && (
@@ -832,14 +865,12 @@ export default function Prescriptions() {
                           <div className="rounded-lg border border-border bg-card p-4 space-y-2">
                             {chief && (
                               <div className="text-sm">
-                                <p className="text-xs font-semibold text-muted-foreground">Chief complaint</p>
                                 <p className="text-muted-foreground whitespace-pre-wrap">{chief}</p>
                               </div>
                             )}
                             {/* Keep showing parsed condition from older notes, but don't require a separate field in the form. */}
                             {cond && !chief && (
                               <div className="text-sm">
-                                <p className="text-xs font-semibold text-muted-foreground">Chief complaint</p>
                                 <p className="text-muted-foreground whitespace-pre-wrap">{cond}</p>
                               </div>
                             )}
@@ -851,25 +882,50 @@ export default function Prescriptions() {
                         <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                           Advice medications
                         </h3>
-                        <div className="rounded-lg border border-border overflow-hidden">
-                          <div className="grid grid-cols-12 gap-2 bg-muted/40 px-3 py-2 text-[11px] font-semibold text-muted-foreground">
-                            <div className="col-span-4">Drug name</div>
-                            <div className="col-span-5">Prescription details</div>
-                            <div className="col-span-3">Instruction</div>
-                          </div>
-                          <div className="divide-y divide-border">
-                            {detailMeds.map((m) => (
-                              <div key={m.id} className="grid grid-cols-12 gap-2 px-3 py-2 text-sm">
-                                <div className="col-span-4 font-medium break-words">{m.name}</div>
-                                <div className="col-span-5 text-muted-foreground">
-                                  {[m.dosage, m.frequency, m.duration].filter(Boolean).join(' · ') || '—'}
+                        <div className="space-y-3">
+                          {detailMeds.map((m) => {
+                            const dose =
+                              m.dosageValue != null && m.dosageUnit
+                                ? `${m.dosageValue} ${m.dosageUnit}`
+                                : (m.dosage || '');
+                            const when = timesLabel(m.timesOfDay as TimesOfDay[] | undefined) || '';
+                            const meal = m.mealTiming ? mealLabel[m.mealTiming as NonNullable<MealTiming>] : '';
+                            const route = m.route ? routeLabel[m.route as NonNullable<Route>] : '';
+                            const duration =
+                              m.durationValue != null && m.durationUnit
+                                ? `${m.durationValue} ${m.durationUnit}`
+                                : (m.duration || '');
+                            const instruction = m.instructions?.trim() || '';
+
+                            const Row = ({ label, value }: { label: string; value: string }) =>
+                              value ? (
+                                <div className="flex items-start justify-between gap-3">
+                                  <div className="text-xs font-semibold text-muted-foreground">{label}</div>
+                                  <div className="text-sm text-muted-foreground text-right whitespace-pre-wrap break-words">
+                                    {value}
+                                  </div>
                                 </div>
-                                <div className="col-span-3 text-muted-foreground break-words">
-                                  {m.instructions?.trim() || '—'}
+                              ) : null;
+
+                            return (
+                              <div key={m.id} className="rounded-lg border border-border bg-card p-4">
+                                <div className="flex items-start justify-between gap-3">
+                                  <div className="min-w-0">
+                                    <div className="text-sm font-semibold">{m.name || '—'}</div>
+                                  </div>
+                                </div>
+
+                                <div className="mt-3 space-y-2">
+                                  <Row label="Dose" value={dose} />
+                                  <Row label="When" value={when} />
+                                  <Row label="Meal timing" value={meal} />
+                                  <Row label="Route" value={route} />
+                                  <Row label="Duration" value={duration} />
+                                  <Row label="Instruction" value={instruction} />
                                 </div>
                               </div>
-                            ))}
-                          </div>
+                            );
+                          })}
                         </div>
                       </div>
                     </>
