@@ -32,6 +32,8 @@ import {
 import { medsFromRx } from '@/lib/documents/linkedDocuments';
 import { useHighlightScroll } from '@/hooks/useHighlightParam';
 import { cn } from '@/lib/utils';
+import { useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
 
 const MED_META_SENTINEL = '\n__bb_meta__:';
 
@@ -41,10 +43,16 @@ type Route = Medicine['route'];
 type DurationUnit = Medicine['durationUnit'];
 type DosageUnit = Medicine['dosageUnit'];
 
-function summarizeMedicine(med: Medicine): string {
-  const name = med.name?.trim() || 'New medicine';
-  const dosage = med.dosageValue != null && med.dosageUnit ? `${med.dosageValue} ${med.dosageUnit}` : '';
-  const dur = med.durationValue != null && med.durationUnit ? `${med.durationValue} ${med.durationUnit}` : '';
+function summarizeMedicine(med: Medicine, t: TFunction): string {
+  const name = med.name?.trim() || t('prescriptions.newMedicine');
+  const dosage =
+    med.dosageValue != null && med.dosageUnit
+      ? `${med.dosageValue} ${t(`prescriptions.dosageUnit.${med.dosageUnit}`)}`
+      : '';
+  const dur =
+    med.durationValue != null && med.durationUnit
+      ? `${med.durationValue} ${t(`prescriptions.durationUnit.${med.durationUnit}`)}`
+      : '';
   const bits = [dosage, dur].filter(Boolean).join(' · ');
   return bits ? `${name} — ${bits}` : name;
 }
@@ -92,7 +100,7 @@ function unpackMedicine(m: Medicine): Medicine {
   }
 }
 
-function packMedicine(m: Medicine): Medicine {
+function packMedicine(m: Medicine, t: TFunction): Medicine {
   const dosageMl = Number.isFinite(m.dosageMl) ? m.dosageMl : undefined;
   const dosageValue = Number.isFinite(m.dosageValue) ? m.dosageValue : undefined;
   const durationValue = Number.isFinite(m.durationValue) ? m.durationValue : undefined;
@@ -101,31 +109,21 @@ function packMedicine(m: Medicine): Medicine {
   const dosageUnit = m.dosageUnit;
   const dosage =
     dosageValue != null && dosageUnit
-      ? `${dosageValue} ${dosageUnit}`
+      ? `${dosageValue} ${t(`prescriptions.dosageUnit.${dosageUnit}`)}`
       : dosageMl != null
-        ? `${dosageMl} ml`
+        ? `${dosageMl} ${t('prescriptions.dosageUnit.ml')}`
         : (m.dosage ?? '');
   const parts: string[] = [];
-  if (timesOfDay.length) parts.push(timesOfDay.map((t) => t[0].toUpperCase() + t.slice(1)).join(', '));
-  if (m.mealTiming) {
-    const mealLabel: Record<NonNullable<MealTiming>, string> = {
-      before_breakfast: 'Before breakfast',
-      after_breakfast: 'After breakfast',
-      before_food: 'Before food',
-      after_food: 'After food',
-      before_lunch: 'Before lunch',
-      after_lunch: 'After lunch',
-      before_dinner: 'Before dinner',
-      after_dinner: 'After dinner',
-    };
-    parts.push(mealLabel[m.mealTiming]);
+  if (timesOfDay.length) {
+    parts.push(timesOfDay.map((slot) => t(`prescriptions.timeOfDay.${slot}`)).join(', '));
   }
-  if (m.route) parts.push(m.route.toUpperCase());
+  if (m.mealTiming) parts.push(t(`prescriptions.mealOption.${m.mealTiming}`));
+  if (m.route) parts.push(t(`prescriptions.routeOption.${m.route}`));
   const frequency = parts.join(' · ') || (m.frequency ?? '');
 
   const durationText =
     durationValue != null && m.durationUnit
-      ? `${durationValue} ${m.durationUnit}`
+      ? `${durationValue} ${t(`prescriptions.durationUnit.${m.durationUnit}`)}`
       : (m.duration ?? '');
 
   const meta: Partial<Medicine> = {
@@ -184,6 +182,7 @@ export default function Prescriptions() {
   const [dateTo, setDateTo] = useState<string>('');
   const fileRef = useRef<HTMLInputElement>(null);
   const { pickingFile, beforePick, afterPick } = useFilePickerDialogGuard();
+  const { t } = useTranslation();
 
   const childRx = useMemo(() => {
     if (!selectedChild) return [];
@@ -230,7 +229,7 @@ export default function Prescriptions() {
     }
   }, [selectedChild, childRx, detailRxId]);
 
-  if (!selectedChild) return <p className="text-muted-foreground text-center py-20">Please select or add a child first.</p>;
+  if (!selectedChild) return <p className="text-muted-foreground text-center py-20">{t('empty.selectChildFirst')}</p>;
 
   const today = startOfDay(new Date());
   const setRange = (from: Date, to: Date) => {
@@ -249,7 +248,7 @@ export default function Prescriptions() {
     const { chiefComplaint } = parseRxNotesToFields(detailRx.notes);
     if (chiefComplaint.trim()) return chiefComplaint.trim();
     if (detailMeds.length === 1 && detailMeds[0].name?.trim()) return detailMeds[0].name.trim();
-    return 'Prescription';
+    return t('prescriptions.defaultTitle');
   })();
 
   const resetDialog = () => {
@@ -260,15 +259,15 @@ export default function Prescriptions() {
 
   const handleSave = () => {
     const validMeds = form.medicines.filter(m => m.name.trim());
-    if (validMeds.length === 0) { toast.error('At least one medicine name is required.'); return; }
+    if (validMeds.length === 0) { toast.error(t('prescriptions.atLeastOneMedicine')); return; }
     const rxData = {
       ...form,
       notes: buildRxNotesFromFields(form.chiefComplaint, form.condition),
-      medicines: validMeds.map((m) => packMedicine(m)),
+      medicines: validMeds.map((m) => packMedicine(m, t)),
     };
     if (editing) {
       updatePrescription({ ...editing, ...rxData } as Prescription);
-      toast.success('Updated!');
+      toast.success(t('prescriptions.updated'));
     } else {
       addPrescription({
         ...rxData,
@@ -276,7 +275,7 @@ export default function Prescriptions() {
         childId: selectedChild.id,
         createdAt: new Date().toISOString(),
       } as Prescription);
-      toast.success('Prescription added!');
+      toast.success(t('prescriptions.added'));
     }
     setOpen(false);
     resetDialog();
@@ -327,7 +326,7 @@ export default function Prescriptions() {
         }
         setForm(prev => ({ ...prev, prescriptionImage: data }));
       } catch (err) {
-        toast.error(err instanceof Error ? err.message : 'Could not process this image.');
+        toast.error(err instanceof Error ? err.message : t('common.imageProcessFailed'));
       }
       input.value = '';
     };
@@ -352,7 +351,7 @@ export default function Prescriptions() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-3">
-        <h1 className="text-3xl font-display font-bold">Prescriptions</h1>
+        <h1 className="text-3xl font-display font-bold">{t('pages.prescriptions.title')}</h1>
         <Dialog
           open={open}
           onOpenChange={o => {
@@ -362,7 +361,7 @@ export default function Prescriptions() {
           }}
         >
           <DialogTrigger asChild>
-            <Button className="gap-2"><Plus className="h-4 w-4" /> Add Prescription</Button>
+            <Button className="gap-2"><Plus className="h-4 w-4" /> {t('prescriptions.addPrescription')}</Button>
           </DialogTrigger>
           <DialogContent
             className="max-w-lg max-h-[90vh] overflow-y-auto"
@@ -370,15 +369,17 @@ export default function Prescriptions() {
             onPointerDownOutside={blockCloseWhilePicking}
           >
             <DialogHeader>
-              <DialogTitle className="font-display">{editing ? 'Edit' : 'Add'} Prescription</DialogTitle>
+              <DialogTitle className="font-display">
+                {t('prescriptions.dialogTitle', { action: editing ? t('common.edit') : t('common.add') })}
+              </DialogTitle>
             </DialogHeader>
             <div className="space-y-4">
               {/* Medicines list */}
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
-                  <Label className="text-sm font-semibold">Advice medications</Label>
+                  <Label className="text-sm font-semibold">{t('prescriptions.adviceMedications')}</Label>
                   <Button type="button" variant="outline" size="sm" onClick={addMedicine} className="gap-1">
-                    <Plus className="h-3 w-3" /> Add Medicine
+                    <Plus className="h-3 w-3" /> {t('prescriptions.addMedicine')}
                   </Button>
                 </div>
                 <Accordion
@@ -395,8 +396,10 @@ export default function Prescriptions() {
                           <div className="min-w-0 flex-1">
                             <AccordionTrigger className="py-0 hover:no-underline">
                               <div className="min-w-0 text-left">
-                                <div className="text-xs font-medium text-muted-foreground">Medicine {idx + 1}</div>
-                                <div className="text-sm font-medium truncate">{summarizeMedicine(med)}</div>
+                                <div className="text-xs font-medium text-muted-foreground">
+                                  {t('prescriptions.medicineIndex', { n: idx + 1 })}
+                                </div>
+                                <div className="text-sm font-medium truncate">{summarizeMedicine(med, t)}</div>
                               </div>
                             </AccordionTrigger>
                           </div>
@@ -407,7 +410,7 @@ export default function Prescriptions() {
                               size="icon"
                               className="h-8 w-8 shrink-0"
                               onClick={() => removeMedicine(idx)}
-                              aria-label="Remove medicine"
+                              aria-label={t('prescriptions.removeMedicineAria')}
                             >
                               <X className="h-4 w-4" />
                             </Button>
@@ -418,15 +421,15 @@ export default function Prescriptions() {
                           <div className="space-y-3">
                             <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                               <div className="sm:col-span-2 space-y-1.5">
-                                <Label className="text-xs text-muted-foreground">Drug name *</Label>
+                                <Label className="text-xs text-muted-foreground">{t('prescriptions.drugName')}</Label>
                                 <Input
-                                  placeholder="e.g. Crocin / Paracetamol"
+                                  placeholder={t('prescriptions.drugPlaceholder')}
                                   value={med.name}
                                   onChange={(e) => patchMedicine(idx, { name: e.target.value })}
                                 />
                               </div>
                               <div className="space-y-1.5">
-                                <Label className="text-xs text-muted-foreground">Dosage</Label>
+                                <Label className="text-xs text-muted-foreground">{t('prescriptions.dosage')}</Label>
                                 <div className="flex flex-wrap items-center gap-2">
                                   <Input
                                     type="number"
@@ -443,37 +446,45 @@ export default function Prescriptions() {
                                     onChange={(e) => patchMedicine(idx, { dosageUnit: (e.target.value || undefined) as DosageUnit })}
                                   >
                                     <option value="">—</option>
-                                    <option value="ml">ml</option>
-                                    <option value="drops">drops</option>
-                                    <option value="mg">mg</option>
-                                    <option value="g">g</option>
-                                    <option value="tsp">tsp</option>
-                                    <option value="tbsp">tbsp</option>
-                                    <option value="puffs">puffs</option>
-                                    <option value="tablets">tablets</option>
-                                    <option value="capsules">capsules</option>
-                                    <option value="units">units</option>
-                                    <option value="other">other</option>
+                                    {(
+                                      [
+                                        'ml',
+                                        'drops',
+                                        'mg',
+                                        'g',
+                                        'tsp',
+                                        'tbsp',
+                                        'puffs',
+                                        'tablets',
+                                        'capsules',
+                                        'units',
+                                        'other',
+                                      ] as const
+                                    ).map((unit) => (
+                                      <option key={unit} value={unit}>
+                                        {t(`prescriptions.dosageUnit.${unit}`)}
+                                      </option>
+                                    ))}
                                   </select>
                                 </div>
                               </div>
                             </div>
 
                             <div className="space-y-1.5">
-                              <Label className="text-xs text-muted-foreground">When</Label>
+                              <Label className="text-xs text-muted-foreground">{t('prescriptions.when')}</Label>
                               <div className="flex flex-wrap gap-2">
-                                {(['morning', 'afternoon', 'night'] as const).map((t) => {
-                                  const checked = (med.timesOfDay ?? []).includes(t);
+                                {(['morning', 'afternoon', 'night'] as const).map((slot) => {
+                                  const checked = (med.timesOfDay ?? []).includes(slot);
                                   return (
                                     <Button
-                                      key={t}
+                                      key={slot}
                                       type="button"
                                       size="sm"
                                       variant={checked ? 'default' : 'outline'}
-                                      className="capitalize h-8"
+                                      className="h-8"
                                       onClick={() => {
                                         const next = new Set(med.timesOfDay ?? []);
-                                        if (checked) next.delete(t); else next.add(t);
+                                        if (checked) next.delete(slot); else next.add(slot);
                                         const nextTimes = Array.from(next) as TimesOfDay[];
                                         const isFoodTiming =
                                           med.mealTiming === 'before_food' || med.mealTiming === 'after_food';
@@ -486,7 +497,7 @@ export default function Prescriptions() {
                                         });
                                       }}
                                     >
-                                      {t}
+                                      {t(`prescriptions.timeOfDay.${slot}`)}
                                     </Button>
                                   );
                                 })}
@@ -495,7 +506,7 @@ export default function Prescriptions() {
 
                             <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                               <div className="space-y-1.5">
-                                <Label className="text-xs text-muted-foreground">Meal timing</Label>
+                                <Label className="text-xs text-muted-foreground">{t('prescriptions.mealTiming')}</Label>
                                 <select
                                   className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground"
                                   value={med.mealTiming ?? ''}
@@ -504,42 +515,40 @@ export default function Prescriptions() {
                                   <option value="">—</option>
                                   {timesCount >= 2 ? (
                                     <>
-                                      <option value="before_food">Before food</option>
-                                      <option value="after_food">After food</option>
+                                      <option value="before_food">{t('prescriptions.mealOption.before_food')}</option>
+                                      <option value="after_food">{t('prescriptions.mealOption.after_food')}</option>
                                     </>
                                   ) : (
                                     <>
-                                      <option value="before_breakfast">Before breakfast</option>
-                                      <option value="after_breakfast">After breakfast</option>
-                                      <option value="before_lunch">Before lunch</option>
-                                      <option value="after_lunch">After lunch</option>
-                                      <option value="before_dinner">Before dinner</option>
-                                      <option value="after_dinner">After dinner</option>
+                                      <option value="before_breakfast">{t('prescriptions.mealOption.before_breakfast')}</option>
+                                      <option value="after_breakfast">{t('prescriptions.mealOption.after_breakfast')}</option>
+                                      <option value="before_lunch">{t('prescriptions.mealOption.before_lunch')}</option>
+                                      <option value="after_lunch">{t('prescriptions.mealOption.after_lunch')}</option>
+                                      <option value="before_dinner">{t('prescriptions.mealOption.before_dinner')}</option>
+                                      <option value="after_dinner">{t('prescriptions.mealOption.after_dinner')}</option>
                                     </>
                                   )}
                                 </select>
                               </div>
 
                               <div className="space-y-1.5">
-                                <Label className="text-xs text-muted-foreground">Route</Label>
+                                <Label className="text-xs text-muted-foreground">{t('prescriptions.route')}</Label>
                                 <select
                                   className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground"
                                   value={med.route ?? ''}
                                   onChange={(e) => patchMedicine(idx, { route: (e.target.value || undefined) as Route })}
                                 >
                                   <option value="">—</option>
-                                  <option value="oral">Oral</option>
-                                  <option value="iv">IV</option>
-                                  <option value="im">IM</option>
-                                  <option value="sc">SC</option>
-                                  <option value="inhalation">Inhalation</option>
-                                  <option value="topical">Topical</option>
-                                  <option value="other">Other</option>
+                                  {(['oral', 'iv', 'im', 'sc', 'inhalation', 'topical', 'other'] as const).map((r) => (
+                                    <option key={r} value={r}>
+                                      {t(`prescriptions.routeOption.${r}`)}
+                                    </option>
+                                  ))}
                                 </select>
                               </div>
 
                               <div className="space-y-1.5">
-                                <Label className="text-xs text-muted-foreground">Duration</Label>
+                                <Label className="text-xs text-muted-foreground">{t('prescriptions.duration')}</Label>
                                 <div className="flex flex-wrap items-center gap-2">
                                   <Input
                                     type="number"
@@ -555,19 +564,20 @@ export default function Prescriptions() {
                                     onChange={(e) => patchMedicine(idx, { durationUnit: (e.target.value || undefined) as DurationUnit })}
                                   >
                                     <option value="">—</option>
-                                    <option value="days">Days</option>
-                                    <option value="weeks">Weeks</option>
-                                    <option value="months">Months</option>
-                                    <option value="years">Years</option>
+                                    {(['days', 'weeks', 'months', 'years'] as const).map((du) => (
+                                      <option key={du} value={du}>
+                                        {t(`prescriptions.durationUnit.${du}`)}
+                                      </option>
+                                    ))}
                                   </select>
                                 </div>
                               </div>
                             </div>
 
                             <div className="space-y-1.5">
-                              <Label className="text-xs text-muted-foreground">Instructions</Label>
+                              <Label className="text-xs text-muted-foreground">{t('prescriptions.instructions')}</Label>
                               <Input
-                                placeholder="e.g. If fever above 99°F"
+                                placeholder={t('prescriptions.instructPlaceholder')}
                                 value={med.instructions ?? ''}
                                 onChange={(e) => patchMedicine(idx, { instructions: e.target.value })}
                               />
@@ -580,9 +590,9 @@ export default function Prescriptions() {
                 </Accordion>
               </div>
 
-              <div><Label>Prescribing Doctor</Label><Input value={form.prescribingDoctor || ''} onChange={e => patchForm('prescribingDoctor', e.target.value)} /></div>
+              <div><Label>{t('prescriptions.prescribingDoctor')}</Label><Input value={form.prescribingDoctor || ''} onChange={e => patchForm('prescribingDoctor', e.target.value)} /></div>
               <div className="space-y-2">
-                <Label htmlFor="rx-date">Date</Label>
+                <Label htmlFor="rx-date">{t('documents.dateLabel')}</Label>
                 <DatePicker
                   id="rx-date"
                   value={form.date || ''}
@@ -591,17 +601,17 @@ export default function Prescriptions() {
                 />
               </div>
               <div className="space-y-2">
-                <Label>Chief complaint / condition</Label>
+                <Label>{t('prescriptions.chiefComplaint')}</Label>
                 <Textarea
                   value={form.chiefComplaint || ''}
                   onChange={(e) => patchForm('chiefComplaint', e.target.value)}
-                  placeholder="e.g. Fever since 1 day, cold"
+                  placeholder={t('prescriptions.chiefPlaceholder')}
                 />
               </div>
 
               {/* Prescription Image — hidden input + preview */}
               <div className="space-y-2">
-                <Label>Prescription Image</Label>
+                <Label>{t('prescriptions.prescriptionImage')}</Label>
                 <input
                   ref={fileRef}
                   type="file"
@@ -614,26 +624,26 @@ export default function Prescriptions() {
                   <div className="rounded-lg border border-border bg-muted/20 overflow-hidden">
                     <img
                       src={form.prescriptionImage}
-                      alt="Prescription preview"
+                      alt={t('prescriptions.prescriptionPreviewAlt')}
                       className="max-h-52 w-full object-contain bg-background"
                     />
                     <div className="border-t border-border px-3 py-2 flex gap-2 justify-end">
                       <Button type="button" variant="outline" size="sm" className="gap-1" onClick={triggerFilePick}>
-                        <Image className="h-4 w-4" /> Replace
+                        <Image className="h-4 w-4" /> {t('common.replace')}
                       </Button>
                       <Button type="button" variant="destructive" size="sm" onClick={() => patchForm('prescriptionImage', '')}>
-                        Remove
+                        {t('common.remove')}
                       </Button>
                     </div>
                   </div>
                 ) : (
                   <Button type="button" variant="outline" className="w-full gap-2" onClick={triggerFilePick}>
-                    <Image className="h-4 w-4" /> Upload Image
+                    <Image className="h-4 w-4" /> {t('prescriptions.uploadImage')}
                   </Button>
                 )}
               </div>
 
-              <Button onClick={handleSave} className="w-full">{editing ? 'Update' : 'Add'}</Button>
+              <Button onClick={handleSave} className="w-full">{editing ? t('common.update') : t('common.add')}</Button>
             </div>
           </DialogContent>
         </Dialog>
@@ -641,26 +651,26 @@ export default function Prescriptions() {
 
       <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
         <div className="w-full sm:max-w-sm">
-          <Label htmlFor="rx-search" className="text-xs text-muted-foreground">Search</Label>
+          <Label htmlFor="rx-search" className="text-xs text-muted-foreground">{t('common.search')}</Label>
           <Input
             id="rx-search"
-            placeholder="Search prescriptions..."
+            placeholder={t('prescriptions.searchPlaceholder')}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
         </div>
         <div className="flex flex-wrap items-end gap-2">
           <Button type="button" variant="outline" size="sm" onClick={() => setRange(today, today)}>
-            Today
+            {t('common.today')}
           </Button>
           <Button type="button" variant="outline" size="sm" onClick={() => setRange(subDays(today, 6), today)}>
-            Last 7 days
+            {t('common.last7Days')}
           </Button>
           <Button type="button" variant="outline" size="sm" onClick={() => setRange(subDays(today, 29), today)}>
-            Last 30 days
+            {t('common.last30Days')}
           </Button>
           <Button type="button" variant="outline" size="sm" onClick={() => setRange(startOfMonth(today), endOfMonth(today))}>
-            This month
+            {t('common.thisMonth')}
           </Button>
           {(dateFrom || dateTo || search.trim()) && (
             <Button
@@ -673,12 +683,12 @@ export default function Prescriptions() {
                 setDateTo('');
               }}
             >
-              Clear filters
+              {t('common.clearFilters')}
             </Button>
           )}
         </div>
         <div className="w-full sm:w-auto sm:min-w-[220px]">
-          <Label htmlFor="rx-date-from" className="text-xs text-muted-foreground">From</Label>
+          <Label htmlFor="rx-date-from" className="text-xs text-muted-foreground">{t('common.from')}</Label>
           <DatePicker
             id="rx-date-from"
             value={dateFrom}
@@ -693,7 +703,7 @@ export default function Prescriptions() {
           />
         </div>
         <div className="w-full sm:w-auto sm:min-w-[220px]">
-          <Label htmlFor="rx-date-to" className="text-xs text-muted-foreground">To</Label>
+          <Label htmlFor="rx-date-to" className="text-xs text-muted-foreground">{t('common.to')}</Label>
           <DatePicker
             id="rx-date-to"
             value={dateTo}
@@ -712,7 +722,7 @@ export default function Prescriptions() {
       {childRx.length === 0 ? (
         <div className="text-center py-20">
           <Pill className="h-16 w-16 text-muted-foreground/40 mx-auto mb-4" />
-          <p className="text-muted-foreground">No prescriptions recorded yet.</p>
+          <p className="text-muted-foreground">{t('prescriptions.empty')}</p>
         </div>
       ) : (
         <div className="relative space-y-4">
@@ -721,7 +731,7 @@ export default function Prescriptions() {
             const { chiefComplaint } = parseRxNotesToFields(rx.notes);
             const cardTitle =
               chiefComplaint.trim() ||
-              (meds.length === 1 ? meds[0].name : `${meds.length} Medicines`);
+              (meds.length === 1 ? meds[0].name : t('prescriptions.medicinesCount', { count: meds.length }));
             return (
               <Card
                 key={rx.id}
@@ -737,11 +747,11 @@ export default function Prescriptions() {
                     <CardTitle className="text-base font-display flex flex-wrap items-center gap-2">
                       <Pill className="h-4 w-4 text-primary" />
                       <span className="min-w-0 truncate">{cardTitle}</span>
-                      <Badge variant={rx.active ? 'default' : 'secondary'}>{rx.active ? 'Active' : 'Completed'}</Badge>
+                      <Badge variant={rx.active ? 'default' : 'secondary'}>{rx.active ? t('prescriptions.active') : t('prescriptions.completed')}</Badge>
                     </CardTitle>
                     {chiefComplaint.trim() ? (
                       <p className="text-sm text-muted-foreground">
-                        {meds.length === 1 ? meds[0].name : `${meds.length} medicines`}
+                        {meds.length === 1 ? meds[0].name : t('prescriptions.medicinesCount', { count: meds.length })}
                       </p>
                     ) : meds.length === 1 ? (
                       <p className="text-sm text-muted-foreground">{meds[0].dosage} · {meds[0].frequency} · {meds[0].duration}</p>
@@ -758,9 +768,9 @@ export default function Prescriptions() {
                   <div className="flex shrink-0 flex-col items-end gap-2" onClick={(e) => e.stopPropagation()}>
                     <div className="flex flex-wrap justify-end gap-1">
                       <Button variant="ghost" size="sm" onClick={() => updatePrescription({ ...rx, active: !rx.active })}>
-                        {rx.active ? 'Mark Done' : 'Reactivate'}
+                        {rx.active ? t('prescriptions.markDoneShort') : t('prescriptions.reactivate')}
                       </Button>
-                      <Button variant="ghost" size="icon" onClick={() => openEditRx(rx)} aria-label="Edit prescription">
+                      <Button variant="ghost" size="icon" onClick={() => openEditRx(rx)} aria-label={t('prescriptions.editAria')}>
                         <Pencil className="h-4 w-4" />
                       </Button>
                       <Button
@@ -768,10 +778,10 @@ export default function Prescriptions() {
                         size="icon"
                         onClick={() => {
                           deletePrescription(rx.id);
-                          toast.success('Deleted.');
+                          toast.success(t('prescriptions.deleted'));
                           setDetailRxId((id) => (id === rx.id ? null : id));
                         }}
-                        aria-label="Delete prescription"
+                        aria-label={t('prescriptions.deleteAria')}
                       >
                         <Trash2 className="h-4 w-4 text-destructive" />
                       </Button>
@@ -782,17 +792,22 @@ export default function Prescriptions() {
                         variant="outline"
                         size="sm"
                         className="gap-1.5"
-                        title="View prescription image"
+                        title={t('prescriptions.viewPrescriptionImageTitle')}
                         onClick={() => setPreviewImg(rx.prescriptionImage!)}
                       >
                         <Image className="h-4 w-4 shrink-0" />
-                        View prescription image
+                        {t('prescriptions.viewPrescriptionImage')}
                       </Button>
                     )}
                   </div>
                 </CardHeader>
                 <CardContent>
-                  <p className="text-sm text-muted-foreground">Dr. {rx.prescribingDoctor} · {format(new Date(rx.date), 'PP')}</p>
+                  <p className="text-sm text-muted-foreground">
+                    {rx.prescribingDoctor?.trim()
+                      ? t('common.drWithName', { name: rx.prescribingDoctor.trim() })
+                      : '—'}{' '}
+                    · {format(new Date(rx.date), 'PP')}
+                  </p>
                   {rx.notes && <p className="text-xs text-muted-foreground mt-1 italic">{rx.notes}</p>}
                 </CardContent>
               </Card>
@@ -810,11 +825,14 @@ export default function Prescriptions() {
                 <DialogHeader className="space-y-2 text-left">
                   <DialogTitle className="font-display text-xl leading-snug pr-2">{detailTitle}</DialogTitle>
                   <DialogDescription className="text-sm text-muted-foreground">
-                    Dr. {detailRx.prescribingDoctor || '—'} · {format(new Date(detailRx.date), 'PPP')}
+                    {detailRx.prescribingDoctor?.trim()
+                      ? t('common.drWithName', { name: detailRx.prescribingDoctor.trim() })
+                      : '—'}{' '}
+                    · {format(new Date(detailRx.date), 'PPP')}
                   </DialogDescription>
                   <div className="pt-1">
                     <Badge variant={detailRx.active ? 'default' : 'secondary'}>
-                      {detailRx.active ? 'Active' : 'Completed'}
+                      {detailRx.active ? t('prescriptions.active') : t('prescriptions.completed')}
                     </Badge>
                   </div>
                 </DialogHeader>
@@ -824,35 +842,13 @@ export default function Prescriptions() {
                   const fields = parseRxNotesToFields(detailRx.notes);
                   const chief = fields.chiefComplaint;
                   const cond = fields.condition;
-                  const mealLabel: Record<
-                    NonNullable<MealTiming>,
-                    string
-                  > = {
-                    before_breakfast: 'Before breakfast',
-                    after_breakfast: 'After breakfast',
-                    before_food: 'Before food',
-                    after_food: 'After food',
-                    before_lunch: 'Before lunch',
-                    after_lunch: 'After lunch',
-                    before_dinner: 'Before dinner',
-                    after_dinner: 'After dinner',
-                  };
-                  const routeLabel: Record<NonNullable<Route>, string> = {
-                    oral: 'Oral',
-                    iv: 'IV',
-                    im: 'IM',
-                    sc: 'SC',
-                    inhalation: 'Inhalation',
-                    topical: 'Topical',
-                    other: 'Other',
-                  };
                   const timesLabel = (times: Array<TimesOfDay> | undefined) => {
-                    const t = (times ?? []).filter(Boolean);
-                    if (!t.length) return '';
+                    const slots = (times ?? []).filter(Boolean);
+                    if (!slots.length) return '';
                     const order: TimesOfDay[] = ['morning', 'afternoon', 'night'];
                     return order
-                      .filter((k) => t.includes(k))
-                      .map((k) => k[0].toUpperCase() + k.slice(1))
+                      .filter((k) => slots.includes(k))
+                      .map((k) => t(`prescriptions.timeOfDay.${k}`))
                       .join(', ');
                   };
                   return (
@@ -860,7 +856,7 @@ export default function Prescriptions() {
                       {(chief || cond) && (
                         <div className="space-y-3">
                           <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                            Chief complaint / condition
+                            {t('prescriptions.detailChiefSection')}
                           </h3>
                           <div className="rounded-lg border border-border bg-card p-4 space-y-2">
                             {chief && (
@@ -880,20 +876,22 @@ export default function Prescriptions() {
 
                       <div className="space-y-3">
                         <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                          Advice medications
+                          {t('prescriptions.detailAdviceMedications')}
                         </h3>
                         <div className="space-y-3">
                           {detailMeds.map((m) => {
                             const dose =
                               m.dosageValue != null && m.dosageUnit
-                                ? `${m.dosageValue} ${m.dosageUnit}`
+                                ? `${m.dosageValue} ${t(`prescriptions.dosageUnit.${m.dosageUnit}`)}`
                                 : (m.dosage || '');
                             const when = timesLabel(m.timesOfDay as TimesOfDay[] | undefined) || '';
-                            const meal = m.mealTiming ? mealLabel[m.mealTiming as NonNullable<MealTiming>] : '';
-                            const route = m.route ? routeLabel[m.route as NonNullable<Route>] : '';
+                            const meal = m.mealTiming
+                              ? t(`prescriptions.mealOption.${m.mealTiming}`)
+                              : '';
+                            const route = m.route ? t(`prescriptions.routeOption.${m.route}`) : '';
                             const duration =
                               m.durationValue != null && m.durationUnit
-                                ? `${m.durationValue} ${m.durationUnit}`
+                                ? `${m.durationValue} ${t(`prescriptions.durationUnit.${m.durationUnit}`)}`
                                 : (m.duration || '');
                             const instruction = m.instructions?.trim() || '';
 
@@ -916,12 +914,12 @@ export default function Prescriptions() {
                                 </div>
 
                                 <div className="mt-3 space-y-2">
-                                  <Row label="Dose" value={dose} />
-                                  <Row label="When" value={when} />
-                                  <Row label="Meal timing" value={meal} />
-                                  <Row label="Route" value={route} />
-                                  <Row label="Duration" value={duration} />
-                                  <Row label="Instruction" value={instruction} />
+                                  <Row label={t('prescriptions.fieldDose')} value={dose} />
+                                  <Row label={t('prescriptions.fieldWhen')} value={when} />
+                                  <Row label={t('prescriptions.fieldMealTiming')} value={meal} />
+                                  <Row label={t('prescriptions.fieldRoute')} value={route} />
+                                  <Row label={t('prescriptions.fieldDuration')} value={duration} />
+                                  <Row label={t('prescriptions.fieldInstruction')} value={instruction} />
                                 </div>
                               </div>
                             );
@@ -935,7 +933,7 @@ export default function Prescriptions() {
                 {detailRx.prescriptionImage && (
                   <div className="space-y-2">
                     <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                      Prescription image
+                      {t('prescriptions.detailPrescriptionImage')}
                     </h3>
                     <button
                       type="button"
@@ -944,11 +942,11 @@ export default function Prescriptions() {
                     >
                       <img
                         src={detailRx.prescriptionImage}
-                        alt="Prescription attachment"
+                        alt={t('prescriptions.prescriptionAttachmentAlt')}
                         className="max-h-56 w-full object-contain bg-background"
                       />
                       <span className="absolute bottom-2 right-2 rounded-md bg-background/90 px-2 py-1 text-xs font-medium shadow-sm">
-                        Tap to enlarge
+                        {t('prescriptions.tapToEnlarge')}
                       </span>
                     </button>
                   </div>
@@ -962,10 +960,10 @@ export default function Prescriptions() {
                     size="sm"
                     onClick={() => {
                       updatePrescription({ ...detailRx, active: !detailRx.active });
-                      toast.success(detailRx.active ? 'Marked completed.' : 'Reactivated.');
+                      toast.success(detailRx.active ? t('prescriptions.markedCompleted') : t('prescriptions.reactivatedToast'));
                     }}
                   >
-                    {detailRx.active ? 'Mark done' : 'Reactivate'}
+                    {detailRx.active ? t('prescriptions.markDone') : t('prescriptions.reactivate')}
                   </Button>
                   <Button
                     type="button"
@@ -978,11 +976,11 @@ export default function Prescriptions() {
                     }}
                   >
                     <Pencil className="h-4 w-4" />
-                    Edit
+                    {t('common.edit')}
                   </Button>
                 </div>
                 <Button type="button" variant="secondary" size="sm" onClick={() => setDetailRxId(null)}>
-                  Close
+                  {t('common.close')}
                 </Button>
               </DialogFooter>
             </>
@@ -993,8 +991,8 @@ export default function Prescriptions() {
       {/* Full-screen image preview */}
       <Dialog open={!!previewImg} onOpenChange={() => setPreviewImg(null)}>
         <DialogContent className="max-w-2xl">
-          <DialogHeader><DialogTitle>Prescription Image</DialogTitle></DialogHeader>
-          {previewImg && <img src={previewImg} alt="Prescription" className="w-full rounded-lg" />}
+          <DialogHeader><DialogTitle>{t('prescriptions.dialogImageTitle')}</DialogTitle></DialogHeader>
+          {previewImg && <img src={previewImg} alt={t('prescriptions.dialogImageAlt')} className="w-full rounded-lg" />}
         </DialogContent>
       </Dialog>
     </div>

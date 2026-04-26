@@ -5,10 +5,12 @@ import { useApp } from '@/lib/contexts/AppContext';
 import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { LogOut } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
 export function AppLayout() {
   const { userEmail, usesRemoteData, signOut } = useApp();
   const navigate = useNavigate();
+  const { t, i18n } = useTranslation();
 
   const initials = (email: string) => {
     const base = email.split('@')[0] || email;
@@ -32,7 +34,7 @@ export function AppLayout() {
                     type="button"
                     variant="ghost"
                     className="h-10 w-10 rounded-full p-0"
-                    aria-label="Account"
+                    aria-label={t('common.account')}
                   >
                     <span className="inline-flex h-9 w-9 items-center justify-center rounded-full border bg-background text-xs font-semibold">
                       {initials(userEmail)}
@@ -41,9 +43,41 @@ export function AppLayout() {
                 </PopoverTrigger>
                 <PopoverContent align="end" className="w-72 p-2">
                   <div className="px-2 py-2">
-                    <div className="text-sm font-medium leading-none">Account</div>
+                    <div className="text-sm font-medium leading-none">{t('common.account')}</div>
                     <div className="mt-1 text-xs text-muted-foreground truncate" title={userEmail}>
                       {userEmail}
+                    </div>
+                  </div>
+                  <div className="h-px bg-muted my-1" />
+                  <div className="px-2 py-1.5">
+                    <div className="text-[11px] font-semibold text-muted-foreground mb-2">
+                      Language
+                    </div>
+                    <div className="grid grid-cols-3 gap-2">
+                      <Button
+                        type="button"
+                        variant={i18n.language === 'en' ? 'default' : 'outline'}
+                        size="sm"
+                        onClick={() => i18n.changeLanguage('en')}
+                      >
+                        {t('language.english')}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant={i18n.language === 'hi' ? 'default' : 'outline'}
+                        size="sm"
+                        onClick={() => i18n.changeLanguage('hi')}
+                      >
+                        {t('language.hindi')}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant={i18n.language === 'mr' ? 'default' : 'outline'}
+                        size="sm"
+                        onClick={() => i18n.changeLanguage('mr')}
+                      >
+                        {t('language.marathi')}
+                      </Button>
                     </div>
                   </div>
                   <div className="h-px bg-muted my-1" />
@@ -57,7 +91,7 @@ export function AppLayout() {
                     }}
                   >
                     <LogOut className="h-4 w-4" />
-                    Sign out
+                    {t('common.signOut')}
                   </Button>
                 </PopoverContent>
               </Popover>
@@ -66,6 +100,9 @@ export function AppLayout() {
           <main className="flex-1 p-4 md:p-6 overflow-auto">
             <Outlet />
           </main>
+          <footer className="border-t px-4 py-3 text-center text-xs text-muted-foreground">
+            © 2026 BabyBloomCare. All rights reserved.
+          </footer>
         </div>
       </div>
     </SidebarProvider>

@@ -8,22 +8,28 @@ import { format, differenceInMonths, differenceInDays } from 'date-fns';
 import { vaccineSchedule, getVaccineDueDate } from '@/lib/data/vaccineSchedule';
 import { APP_TITLE, APP_TAGLINE } from '@/lib/appMeta';
 import { getChildAvatar } from '@/lib/childAvatars';
+import { useTranslation } from 'react-i18next';
+
+function vaccinationsFocusPath(ageInWeeks: number, vaccineName: string) {
+  return `/vaccinations?ageWeeks=${ageInWeeks}&vax=${encodeURIComponent(vaccineName)}`;
+}
 
 export default function Dashboard() {
   const { children, selectedChild, visits, vaccinations, prescriptions, billing } = useApp();
   const navigate = useNavigate();
+  const { t } = useTranslation();
 
   if (children.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] text-center">
         <Baby className="h-20 w-20 text-primary/40 mb-6" />
-        <h1 className="text-3xl font-display font-bold mb-2">Welcome to {APP_TITLE}</h1>
+        <h1 className="text-3xl font-display font-bold mb-2">{t('dashboard.welcomeTo', { appTitle: APP_TITLE })}</h1>
         <p className="text-sm text-primary/80 font-medium mb-2">{APP_TAGLINE}</p>
         <p className="text-muted-foreground mb-6 max-w-md">
-          Start by adding your child&apos;s profile to track hospital visits, vaccinations, growth, and more.
+          {t('dashboard.startByAddingChild')}
         </p>
         <Button size="lg" onClick={() => navigate('/children')} className="gap-2">
-          <Plus className="h-5 w-5" /> Add Your First Child
+          <Plus className="h-5 w-5" /> {t('dashboard.addYourFirstChild')}
         </Button>
       </div>
     );
@@ -65,7 +71,7 @@ export default function Dashboard() {
           <div>
           <h1 className="text-3xl font-display font-bold">{selectedChild.name}</h1>
           <p className="text-muted-foreground">
-            {ageText} old · Born {format(new Date(selectedChild.dateOfBirth), 'PP')}
+            {ageText} {t('dashboard.old')} · {t('dashboard.born')} {format(new Date(selectedChild.dateOfBirth), 'PP')}
           </p>
           </div>
         </div>
@@ -74,18 +80,18 @@ export default function Dashboard() {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <Card className="hover:shadow-md transition-shadow cursor-pointer" onClick={() => navigate('/visits')}>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Last Visit</CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground">{t('dashboard.lastVisit')}</CardTitle>
             <Stethoscope className="h-4 w-4 text-primary" />
           </CardHeader>
           <CardContent>
-            <div className="text-xl font-bold">{latestVisit ? format(new Date(latestVisit.date), 'PP') : 'No visits'}</div>
+            <div className="text-xl font-bold">{latestVisit ? format(new Date(latestVisit.date), 'PP') : t('dashboard.noVisits')}</div>
             {latestVisit && <p className="text-xs text-muted-foreground mt-1">{latestVisit.reason}</p>}
           </CardContent>
         </Card>
 
         <Card className="hover:shadow-md transition-shadow cursor-pointer" onClick={() => navigate('/growth')}>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Latest Growth</CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground">{t('dashboard.latestGrowth')}</CardTitle>
             <TrendingUp className="h-4 w-4 text-info" />
           </CardHeader>
           <CardContent>
@@ -96,44 +102,51 @@ export default function Dashboard() {
                 {latestVisit.height && `${latestVisit.height} cm`}
               </div>
             ) : (
-              <div className="text-xl font-bold">No data</div>
+              <div className="text-xl font-bold">{t('dashboard.noData')}</div>
             )}
           </CardContent>
         </Card>
 
-        <Card className="hover:shadow-md transition-shadow cursor-pointer" onClick={() => navigate('/vaccinations')}>
+        <Card
+          className="hover:shadow-md transition-shadow cursor-pointer"
+          onClick={() =>
+            upcomingVax
+              ? navigate(vaccinationsFocusPath(upcomingVax.ageInWeeks, upcomingVax.name))
+              : navigate('/vaccinations')
+          }
+        >
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Next Vaccination</CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground">{t('dashboard.nextVaccination')}</CardTitle>
             <Syringe className="h-4 w-4 text-success" />
           </CardHeader>
           <CardContent>
             {upcomingVax ? (
               <>
                 <div className="text-lg font-bold">{upcomingVax.name}</div>
-                <p className="text-xs text-muted-foreground mt-1">Due: {format(new Date(nextVaxDue!), 'PP')}</p>
+                <p className="text-xs text-muted-foreground mt-1">{t('dashboard.due')}: {format(new Date(nextVaxDue!), 'PP')}</p>
               </>
             ) : (
-              <div className="text-xl font-bold">All done! 🎉</div>
+              <div className="text-xl font-bold">{t('dashboard.allDone')} 🎉</div>
             )}
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Quick Stats</CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground">{t('dashboard.quickStats')}</CardTitle>
             <Baby className="h-4 w-4 text-warning" />
           </CardHeader>
           <CardContent className="space-y-1">
             <div className="flex justify-between text-sm">
-              <span className="text-muted-foreground">Active Rx</span>
+              <span className="text-muted-foreground">{t('dashboard.activeRx')}</span>
               <Badge variant="secondary">{activeRx}</Badge>
             </div>
             <div className="flex justify-between text-sm">
-              <span className="text-muted-foreground">Total Visits</span>
+              <span className="text-muted-foreground">{t('dashboard.totalVisits')}</span>
               <Badge variant="secondary">{childVisits.length}</Badge>
             </div>
             <div className="flex justify-between text-sm">
-              <span className="text-muted-foreground">Total Spent</span>
+              <span className="text-muted-foreground">{t('dashboard.totalSpent')}</span>
               <span className="font-semibold">₹{totalSpent.toLocaleString()}</span>
             </div>
           </CardContent>
@@ -143,7 +156,7 @@ export default function Dashboard() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <Card>
           <CardHeader>
-            <CardTitle className="text-lg font-display">Recent Visits</CardTitle>
+            <CardTitle className="text-lg font-display">{t('dashboard.recentVisits')}</CardTitle>
           </CardHeader>
           <CardContent>
             {childVisits.length === 0 ? (
@@ -166,26 +179,31 @@ export default function Dashboard() {
 
         <Card>
           <CardHeader>
-            <CardTitle className="text-lg font-display">Upcoming Vaccinations</CardTitle>
+            <CardTitle className="text-lg font-display">{t('dashboard.upcomingVaccinations')}</CardTitle>
           </CardHeader>
           <CardContent>
             {upcomingVaxPreview.length === 0 ? (
-              <p className="text-muted-foreground text-sm">All vaccinations completed! 🎉</p>
+              <p className="text-muted-foreground text-sm">{t('dashboard.allVaccinationsCompleted')}</p>
             ) : (
               <div className="space-y-3">
                 {upcomingVaxPreview.map(vs => {
                   const due = getVaccineDueDate(selectedChild.dateOfBirth, vs.ageInWeeks);
                   const isOverdue = new Date(due) < new Date();
                   return (
-                    <div key={vs.name} className="flex items-center justify-between border-b pb-2 last:border-0">
-                      <div>
+                    <button
+                      type="button"
+                      key={vs.name}
+                      className="flex w-full items-center justify-between gap-2 border-b pb-2 text-left last:border-0 rounded-md -mx-1 px-1 hover:bg-muted/40 transition-colors"
+                      onClick={() => navigate(vaccinationsFocusPath(vs.ageInWeeks, vs.name))}
+                    >
+                      <div className="min-w-0">
                         <p className="font-medium text-sm">{vs.name}</p>
-                        <p className="text-xs text-muted-foreground">{vs.description}</p>
+                        <p className="text-xs text-muted-foreground line-clamp-2">{vs.description}</p>
                       </div>
-                      <Badge variant={isOverdue ? 'destructive' : 'secondary'} className="text-xs">
-                        {isOverdue ? 'Overdue' : format(new Date(due), 'PP')}
+                      <Badge variant={isOverdue ? 'destructive' : 'secondary'} className="text-xs shrink-0">
+                        {isOverdue ? t('dashboard.overdue') : format(new Date(due), 'PP')}
                       </Badge>
-                    </div>
+                    </button>
                   );
                 })}
               </div>
@@ -195,9 +213,9 @@ export default function Dashboard() {
       </div>
 
       <div className="flex flex-wrap gap-3">
-        <Button onClick={() => navigate('/visits')} className="gap-2"><Plus className="h-4 w-4" /> New Visit</Button>
-        <Button variant="outline" onClick={() => navigate('/vaccinations')} className="gap-2"><Syringe className="h-4 w-4" /> Add Vaccination</Button>
-        <Button variant="outline" onClick={() => navigate('/documents')} className="gap-2"><Plus className="h-4 w-4" /> Upload Document</Button>
+        <Button onClick={() => navigate('/visits')} className="gap-2"><Plus className="h-4 w-4" /> {t('dashboard.newVisit')}</Button>
+        <Button variant="outline" onClick={() => navigate('/vaccinations')} className="gap-2"><Syringe className="h-4 w-4" /> {t('dashboard.addVaccination')}</Button>
+        <Button variant="outline" onClick={() => navigate('/documents')} className="gap-2"><Plus className="h-4 w-4" /> {t('dashboard.uploadDocument')}</Button>
       </div>
     </div>
   );

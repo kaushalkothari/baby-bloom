@@ -16,6 +16,7 @@ import { HospitalVisit, Prescription } from '@/types';
 import { toast } from 'sonner';
 import { medsFromRx } from '@/lib/documents/linkedDocuments';
 import { cn } from '@/lib/utils';
+import { useTranslation } from 'react-i18next';
 
 const emptyVisit = (): Partial<HospitalVisit> => ({
   date: new Date().toISOString().split('T')[0], hospitalName: '', doctorName: '', reason: '', description: '',
@@ -45,6 +46,7 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
 
 export default function Visits() {
   const { selectedChild, visits, addVisit, updateVisit, deleteVisit, prescriptions, billing, documents } = useApp();
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<HospitalVisit | null>(null);
   const [form, setForm] = useState<Partial<HospitalVisit>>(emptyVisit());
@@ -84,7 +86,7 @@ export default function Visits() {
     }
   }, [childVisits, detailVisitId]);
 
-  if (!selectedChild) return <p className="text-muted-foreground text-center py-20">Please select or add a child first.</p>;
+  if (!selectedChild) return <p className="text-muted-foreground text-center py-20">{t('empty.selectChildFirst')}</p>;
 
   const today = startOfDay(new Date());
   const setRange = (from: Date, to: Date) => {
@@ -98,15 +100,15 @@ export default function Visits() {
 
   const handleSave = () => {
     if (!form.date || !form.hospitalName || !form.reason) {
-      toast.error('Date, hospital, and reason are required.');
+      toast.error(t('visits.requiredError'));
       return;
     }
     if (editing) {
       updateVisit({ ...editing, ...form } as HospitalVisit);
-      toast.success('Visit updated!');
+      toast.success(t('visits.updated'));
     } else {
       addVisit({ ...form, id: crypto.randomUUID(), childId: selectedChild.id, createdAt: new Date().toISOString() } as HospitalVisit);
-      toast.success('Visit added!');
+      toast.success(t('visits.added'));
     }
     setOpen(false); setEditing(null); setForm(emptyVisit());
   };
@@ -136,14 +138,14 @@ export default function Visits() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-3">
-        <h1 className="text-3xl font-display font-bold">Hospital Visits</h1>
+        <h1 className="text-3xl font-display font-bold">{t('pages.visits.title')}</h1>
         <Dialog open={open} onOpenChange={o => { setOpen(o); if (!o) { setEditing(null); setForm(emptyVisit()); } }}>
-          <DialogTrigger asChild><Button className="gap-2"><Plus className="h-4 w-4" /> Add Visit</Button></DialogTrigger>
+          <DialogTrigger asChild><Button className="gap-2"><Plus className="h-4 w-4" /> {t('visits.addVisit')}</Button></DialogTrigger>
           <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
-            <DialogHeader><DialogTitle className="font-display">{editing ? 'Edit Visit' : 'New Visit'}</DialogTitle></DialogHeader>
+            <DialogHeader><DialogTitle className="font-display">{editing ? t('visits.editVisit') : t('visits.newVisit')}</DialogTitle></DialogHeader>
             <div className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="visit-date">Date *</Label>
+                <Label htmlFor="visit-date">{t('visits.form.dateRequired')}</Label>
                 <DatePicker
                   id="visit-date"
                   value={form.date || ''}
@@ -151,18 +153,18 @@ export default function Visits() {
                   disabled={(d) => isAfter(startOfDay(d), startOfDay(new Date()))}
                 />
               </div>
-              <div><Label>Hospital / Clinic *</Label><Input value={form.hospitalName || ''} onChange={e => set('hospitalName', e.target.value)} /></div>
-              <div><Label>Doctor Name</Label><Input value={form.doctorName || ''} onChange={e => set('doctorName', e.target.value)} /></div>
-              <div><Label>Reason *</Label><Input value={form.reason || ''} onChange={e => set('reason', e.target.value)} placeholder="e.g. Routine checkup" /></div>
-              <div><Label>Description</Label><Textarea value={form.description || ''} onChange={e => set('description', e.target.value)} /></div>
+              <div><Label>{t('visits.info.hospitalName')} *</Label><Input value={form.hospitalName || ''} onChange={e => set('hospitalName', e.target.value)} /></div>
+              <div><Label>{t('visits.info.doctorName')}</Label><Input value={form.doctorName || ''} onChange={e => set('doctorName', e.target.value)} /></div>
+              <div><Label>{t('visits.form.reasonRequired')}</Label><Input value={form.reason || ''} onChange={e => set('reason', e.target.value)} placeholder={t('visits.form.reasonPlaceholder')} /></div>
+              <div><Label>{t('visits.form.details')}</Label><Textarea value={form.description || ''} onChange={e => set('description', e.target.value)} /></div>
               <div className="grid grid-cols-2 gap-3">
-                <div><Label>Weight (kg)</Label><Input type="number" step="0.01" value={form.weight || ''} onChange={e => set('weight', parseFloat(e.target.value) || 0)} /></div>
-                <div><Label>Height (cm)</Label><Input type="number" step="0.1" value={form.height || ''} onChange={e => set('height', parseFloat(e.target.value) || 0)} /></div>
-                <div><Label>Head Circ. (cm)</Label><Input type="number" step="0.1" value={form.headCircumference || ''} onChange={e => set('headCircumference', parseFloat(e.target.value) || 0)} /></div>
-                <div><Label>Temp (°F)</Label><Input type="number" step="0.1" value={form.temperature || ''} onChange={e => set('temperature', parseFloat(e.target.value) || 0)} /></div>
+                <div><Label>{t('visits.info.weightKg')}</Label><Input type="number" step="0.01" value={form.weight || ''} onChange={e => set('weight', parseFloat(e.target.value) || 0)} /></div>
+                <div><Label>{t('visits.info.heightCm')}</Label><Input type="number" step="0.1" value={form.height || ''} onChange={e => set('height', parseFloat(e.target.value) || 0)} /></div>
+                <div><Label>{t('visits.info.headCircumferenceCm')}</Label><Input type="number" step="0.1" value={form.headCircumference || ''} onChange={e => set('headCircumference', parseFloat(e.target.value) || 0)} /></div>
+                <div><Label>{t('visits.info.temperatureF')}</Label><Input type="number" step="0.1" value={form.temperature || ''} onChange={e => set('temperature', parseFloat(e.target.value) || 0)} /></div>
               </div>
-              <div><Label>Additional Notes</Label><Textarea value={form.notes || ''} onChange={e => set('notes', e.target.value)} /></div>
-              <Button onClick={handleSave} className="w-full">{editing ? 'Update' : 'Add Visit'}</Button>
+              <div><Label>{t('visits.form.additionalNotes')}</Label><Textarea value={form.notes || ''} onChange={e => set('notes', e.target.value)} /></div>
+              <Button onClick={handleSave} className="w-full">{editing ? t('common.update') : t('visits.addVisit')}</Button>
             </div>
           </DialogContent>
         </Dialog>
@@ -170,35 +172,35 @@ export default function Visits() {
 
       <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
         <div className="w-full sm:max-w-sm">
-          <Label htmlFor="visit-search" className="text-xs text-muted-foreground">Search</Label>
+          <Label htmlFor="visit-search" className="text-xs text-muted-foreground">{t('common.search')}</Label>
           <Input
             id="visit-search"
-            placeholder="Search visits..."
+            placeholder={t('visits.searchPlaceholder')}
             value={search}
             onChange={e => setSearch(e.target.value)}
           />
         </div>
         <div className="flex flex-wrap items-end gap-2">
           <Button type="button" variant="outline" size="sm" onClick={() => setRange(today, today)}>
-            Today
+            {t('common.today')}
           </Button>
           <Button type="button" variant="outline" size="sm" onClick={() => setRange(subDays(today, 6), today)}>
-            Last 7 days
+            {t('common.last7Days')}
           </Button>
           <Button type="button" variant="outline" size="sm" onClick={() => setRange(subDays(today, 29), today)}>
-            Last 30 days
+            {t('common.last30Days')}
           </Button>
           <Button type="button" variant="outline" size="sm" onClick={() => setRange(startOfMonth(today), endOfMonth(today))}>
-            This month
+            {t('common.thisMonth')}
           </Button>
           {(dateFrom || dateTo) && (
             <Button type="button" variant="ghost" size="sm" onClick={() => { setDateFrom(''); setDateTo(''); }}>
-              Clear dates
+              {t('common.clearDates')}
             </Button>
           )}
         </div>
         <div className="w-full sm:w-auto sm:min-w-[220px]">
-          <Label htmlFor="visit-date-from" className="text-xs text-muted-foreground">From</Label>
+          <Label htmlFor="visit-date-from" className="text-xs text-muted-foreground">{t('common.from')}</Label>
           <DatePicker
             id="visit-date-from"
             value={dateFrom}
@@ -213,7 +215,7 @@ export default function Visits() {
           />
         </div>
         <div className="w-full sm:w-auto sm:min-w-[220px]">
-          <Label htmlFor="visit-date-to" className="text-xs text-muted-foreground">To</Label>
+          <Label htmlFor="visit-date-to" className="text-xs text-muted-foreground">{t('common.to')}</Label>
           <DatePicker
             id="visit-date-to"
             value={dateTo}
@@ -232,7 +234,7 @@ export default function Visits() {
       {childVisits.length === 0 ? (
         <div className="text-center py-20">
           <Stethoscope className="h-16 w-16 text-muted-foreground/40 mx-auto mb-4" />
-          <p className="text-muted-foreground">No visits recorded yet.</p>
+          <p className="text-muted-foreground">{t('visits.empty')}</p>
         </div>
       ) : (
         <div className="relative space-y-4">
@@ -252,7 +254,10 @@ export default function Visits() {
                 <CardHeader className="flex flex-row items-start justify-between pb-2">
                   <div className="flex-1">
                     <CardTitle className="text-base font-display">{v.reason}</CardTitle>
-                    <p className="text-sm text-muted-foreground">{v.hospitalName} · Dr. {v.doctorName} · {format(new Date(v.date), 'PPP')}</p>
+                    <p className="text-sm text-muted-foreground">
+                      {v.hospitalName} · {v.doctorName?.trim() ? t('common.drWithName', { name: v.doctorName.trim() }) : '—'} ·{' '}
+                      {format(new Date(v.date), 'PPP')}
+                    </p>
                   </div>
                   <div className="flex gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
                     <Button variant="ghost" size="icon" onClick={() => openEdit(v)}><Pencil className="h-4 w-4" /></Button>
@@ -261,7 +266,7 @@ export default function Visits() {
                       size="icon"
                       onClick={() => {
                         deleteVisit(v.id);
-                        toast.success('Deleted.');
+                        toast.success(t('visits.deleted'));
                         setDetailVisitId((id) => (id === v.id ? null : id));
                       }}
                     >
@@ -286,7 +291,7 @@ export default function Visits() {
                       <CollapsibleTrigger asChild>
                         <Button variant="ghost" size="sm" className="gap-2 text-xs w-full justify-start text-muted-foreground hover:text-foreground">
                           <ChevronDown className={`h-3 w-3 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
-                          Related Records
+                          {t('visits.relatedRecords')}
                           <div className="flex gap-1 ml-auto">
                             {rxList.length > 0 && <Badge variant="secondary" className="text-[10px] px-1.5 py-0"><Pill className="h-2.5 w-2.5 mr-0.5" />{rxList.length}</Badge>}
                             {billList.length > 0 && <Badge variant="secondary" className="text-[10px] px-1.5 py-0"><ReceiptIndianRupee className="h-2.5 w-2.5 mr-0.5" />{billList.length}</Badge>}
@@ -299,7 +304,7 @@ export default function Visits() {
                         {rxList.length > 0 && (
                           <div className="rounded-lg border border-border p-3 space-y-2 bg-muted/20">
                             <div className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
-                              <Pill className="h-3.5 w-3.5 text-primary" /> Prescriptions
+                              <Pill className="h-3.5 w-3.5 text-primary" /> {t('visits.sections.prescriptions')}
                             </div>
                             {rxList.map((rx: Prescription) => {
                               const meds = medsFromRx(rx);
@@ -308,11 +313,15 @@ export default function Visits() {
                                   {meds.map((m, i) => (
                                     <p key={i}><span className="font-medium">{m.name}</span> — {m.dosage} · {m.frequency} · {m.duration}</p>
                                   ))}
-                                  <p className="text-xs text-muted-foreground">Dr. {rx.prescribingDoctor}</p>
+                                  <p className="text-xs text-muted-foreground">
+                                    {rx.prescribingDoctor?.trim()
+                                      ? t('common.drWithName', { name: rx.prescribingDoctor.trim() })
+                                      : '—'}
+                                  </p>
                                   <Button variant="outline" size="sm" className="h-7 gap-1 text-xs" asChild>
                                     <Link to={`/prescriptions?highlight=${encodeURIComponent(rx.id)}`}>
                                       <ExternalLink className="h-3 w-3" />
-                                      Open in Prescriptions
+                                      {t('visits.openIn.prescriptions')}
                                     </Link>
                                   </Button>
                                 </div>
@@ -325,7 +334,7 @@ export default function Visits() {
                         {billList.length > 0 && (
                           <div className="rounded-lg border border-border p-3 space-y-2 bg-muted/20">
                             <div className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
-                              <ReceiptIndianRupee className="h-3.5 w-3.5 text-primary" /> Billing
+                              <ReceiptIndianRupee className="h-3.5 w-3.5 text-primary" /> {t('visits.sections.billing')}
                             </div>
                             {billList.map(b => (
                               <div key={b.id} className="text-sm border-l-2 border-primary/30 pl-3 space-y-1">
@@ -341,7 +350,7 @@ export default function Visits() {
                                 <Button variant="outline" size="sm" className="h-7 gap-1 text-xs" asChild>
                                   <Link to={`/billing?highlight=${encodeURIComponent(b.id)}`}>
                                     <ExternalLink className="h-3 w-3" />
-                                    Open in Billing
+                                    {t('visits.openIn.billing')}
                                   </Link>
                                 </Button>
                               </div>
@@ -353,18 +362,18 @@ export default function Visits() {
                         {docList.length > 0 && (
                           <div className="rounded-lg border border-border p-3 space-y-2 bg-muted/20">
                             <div className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
-                              <FileText className="h-3.5 w-3.5 text-primary" /> Documents
+                              <FileText className="h-3.5 w-3.5 text-primary" /> {t('visits.sections.documents')}
                             </div>
                             {docList.map((d) => (
                               <div key={d.id} className="text-sm border-l-2 border-primary/30 pl-3 space-y-1">
                                 <div>
                                   <span className="font-medium">{d.name}</span>
-                                  <Badge variant="outline" className="ml-2 text-[10px]">{d.type.replace('_', ' ')}</Badge>
+                                  <Badge variant="outline" className="ml-2 text-[10px]">{t(`documents.types.${d.type}`)}</Badge>
                                 </div>
                                 <Button variant="outline" size="sm" className="h-7 gap-1 text-xs" asChild>
                                   <Link to={`/documents?highlight=${encodeURIComponent(d.id)}`}>
                                     <ExternalLink className="h-3 w-3" />
-                                    Open in Documents
+                                    {t('visits.openIn.documents')}
                                   </Link>
                                 </Button>
                               </div>
@@ -391,36 +400,36 @@ export default function Visits() {
                 <DialogHeader className="space-y-2 text-left">
                   <DialogTitle className="font-display text-xl leading-snug pr-2">{detailVisit.reason}</DialogTitle>
                   <DialogDescription className="text-sm text-muted-foreground">
-                    Visit details
+                    {t('visits.detail.subtitle')}
                   </DialogDescription>
                 </DialogHeader>
               </div>
 
               <div className="space-y-5 px-6 py-4">
                 <div className="space-y-3">
-                  <SectionTitle>Visit information</SectionTitle>
+                  <SectionTitle>{t('visits.detail.visitInformation')}</SectionTitle>
                   <div className="rounded-lg border border-border bg-card p-4 space-y-2.5">
-                    <InfoRow label="Hospital name" value={detailVisit.hospitalName || '—'} />
-                    <InfoRow label="Doctor name" value={detailVisit.doctorName?.trim() || '—'} />
-                    <InfoRow label="Date of visit" value={format(new Date(detailVisit.date), 'PPP')} />
+                    <InfoRow label={t('visits.info.hospitalName')} value={detailVisit.hospitalName || '—'} />
+                    <InfoRow label={t('visits.info.doctorName')} value={detailVisit.doctorName?.trim() || '—'} />
+                    <InfoRow label={t('visits.info.dateOfVisit')} value={format(new Date(detailVisit.date), 'PPP')} />
                   </div>
                 </div>
 
                 {(detailVisit.weight || detailVisit.height || detailVisit.headCircumference || detailVisit.temperature) && (
                   <div className="space-y-3">
-                    <SectionTitle>Vitals</SectionTitle>
+                    <SectionTitle>{t('visits.detail.vitals')}</SectionTitle>
                     <div className="rounded-lg border border-border bg-card p-4 space-y-2.5">
                       {detailVisit.weight != null ? (
-                        <InfoRow label="Weight (kg)" value={detailVisit.weight} />
+                        <InfoRow label={t('visits.info.weightKg')} value={detailVisit.weight} />
                       ) : null}
                       {detailVisit.height != null ? (
-                        <InfoRow label="Height (cm)" value={detailVisit.height} />
+                        <InfoRow label={t('visits.info.heightCm')} value={detailVisit.height} />
                       ) : null}
                       {detailVisit.headCircumference != null ? (
-                        <InfoRow label="Head circumference (cm)" value={detailVisit.headCircumference} />
+                        <InfoRow label={t('visits.info.headCircumferenceCm')} value={detailVisit.headCircumference} />
                       ) : null}
                       {detailVisit.temperature != null ? (
-                        <InfoRow label="Temperature (°F)" value={detailVisit.temperature} />
+                        <InfoRow label={t('visits.info.temperatureF')} value={detailVisit.temperature} />
                       ) : null}
                     </div>
                   </div>
@@ -428,17 +437,17 @@ export default function Visits() {
 
                 {(detailVisit.description?.trim() || detailVisit.notes?.trim()) && (
                   <div className="space-y-3">
-                    <SectionTitle>Notes</SectionTitle>
+                    <SectionTitle>{t('visits.detail.notes')}</SectionTitle>
                     <div className="rounded-lg border border-border bg-card p-4 space-y-3">
                       {detailVisit.description?.trim() && (
                         <div className="space-y-1">
-                          <p className="text-xs font-semibold text-muted-foreground">Description</p>
+                          <p className="text-xs font-semibold text-muted-foreground">{t('visits.detail.description')}</p>
                           <p className="text-sm text-muted-foreground whitespace-pre-wrap">{detailVisit.description.trim()}</p>
                         </div>
                       )}
                       {detailVisit.notes?.trim() && (
                         <div className="space-y-1">
-                          <p className="text-xs font-semibold text-muted-foreground">Additional notes</p>
+                          <p className="text-xs font-semibold text-muted-foreground">{t('visits.detail.additionalNotes')}</p>
                           <p className="text-sm text-muted-foreground whitespace-pre-wrap">{detailVisit.notes.trim()}</p>
                         </div>
                       )}
@@ -448,12 +457,12 @@ export default function Visits() {
 
                 {detailRelated && (detailRelated.rxList.length > 0 || detailRelated.billList.length > 0 || detailRelated.docList.length > 0) && (
                   <div className="space-y-3">
-                    <SectionTitle>Related records</SectionTitle>
+                    <SectionTitle>{t('visits.detail.relatedRecords')}</SectionTitle>
                     <div className="space-y-3">
                       {detailRelated.rxList.length > 0 && (
                         <div className="rounded-lg border border-border p-3 space-y-2 bg-muted/20">
                           <div className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
-                            <Pill className="h-3.5 w-3.5 text-primary" /> Prescriptions
+                            <Pill className="h-3.5 w-3.5 text-primary" /> {t('visits.sections.prescriptions')}
                           </div>
                           {detailRelated.rxList.map((rx: Prescription) => {
                             const meds = medsFromRx(rx);
@@ -462,11 +471,15 @@ export default function Visits() {
                                 {meds.map((m, i) => (
                                   <p key={i}><span className="font-medium">{m.name}</span> — {m.dosage} · {m.frequency} · {m.duration}</p>
                                 ))}
-                                <p className="text-xs text-muted-foreground">Dr. {rx.prescribingDoctor}</p>
+                                <p className="text-xs text-muted-foreground">
+                                  {rx.prescribingDoctor?.trim()
+                                    ? t('common.drWithName', { name: rx.prescribingDoctor.trim() })
+                                    : '—'}
+                                </p>
                                 <Button variant="outline" size="sm" className="h-7 gap-1 text-xs" asChild>
                                   <Link to={`/prescriptions?highlight=${encodeURIComponent(rx.id)}`}>
                                     <ExternalLink className="h-3 w-3" />
-                                    Open in Prescriptions
+                                    {t('visits.openIn.prescriptions')}
                                   </Link>
                                 </Button>
                               </div>
@@ -478,7 +491,7 @@ export default function Visits() {
                       {detailRelated.billList.length > 0 && (
                         <div className="rounded-lg border border-border p-3 space-y-2 bg-muted/20">
                           <div className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
-                            <ReceiptIndianRupee className="h-3.5 w-3.5 text-primary" /> Billing
+                            <ReceiptIndianRupee className="h-3.5 w-3.5 text-primary" /> {t('visits.sections.billing')}
                           </div>
                           {detailRelated.billList.map((b) => (
                             <div key={b.id} className="text-sm border-l-2 border-primary/30 pl-3 space-y-1">
@@ -494,7 +507,7 @@ export default function Visits() {
                               <Button variant="outline" size="sm" className="h-7 gap-1 text-xs" asChild>
                                 <Link to={`/billing?highlight=${encodeURIComponent(b.id)}`}>
                                   <ExternalLink className="h-3 w-3" />
-                                  Open in Billing
+                                  {t('visits.openIn.billing')}
                                 </Link>
                               </Button>
                             </div>
@@ -505,18 +518,18 @@ export default function Visits() {
                       {detailRelated.docList.length > 0 && (
                         <div className="rounded-lg border border-border p-3 space-y-2 bg-muted/20">
                           <div className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
-                            <FileText className="h-3.5 w-3.5 text-primary" /> Documents
+                            <FileText className="h-3.5 w-3.5 text-primary" /> {t('visits.sections.documents')}
                           </div>
                           {detailRelated.docList.map((d) => (
                             <div key={d.id} className="text-sm border-l-2 border-primary/30 pl-3 space-y-1">
                               <div>
                                 <span className="font-medium">{d.name}</span>
-                                <Badge variant="outline" className="ml-2 text-[10px]">{d.type.replace('_', ' ')}</Badge>
+                                <Badge variant="outline" className="ml-2 text-[10px]">{t(`documents.types.${d.type}`)}</Badge>
                               </div>
                               <Button variant="outline" size="sm" className="h-7 gap-1 text-xs" asChild>
                                 <Link to={`/documents?highlight=${encodeURIComponent(d.id)}`}>
                                   <ExternalLink className="h-3 w-3" />
-                                  Open in Documents
+                                  {t('visits.openIn.documents')}
                                 </Link>
                               </Button>
                             </div>
@@ -541,7 +554,7 @@ export default function Visits() {
                     }}
                   >
                     <Pencil className="h-4 w-4" />
-                    Edit
+                    {t('common.edit')}
                   </Button>
                   <Button
                     type="button"
@@ -550,16 +563,16 @@ export default function Visits() {
                     className="gap-1.5"
                     onClick={() => {
                       deleteVisit(detailVisit.id);
-                      toast.success('Deleted.');
+                      toast.success(t('visits.deleted'));
                       setDetailVisitId(null);
                     }}
                   >
                     <Trash2 className="h-4 w-4" />
-                    Delete
+                    {t('common.delete')}
                   </Button>
                 </div>
                 <Button type="button" variant="secondary" size="sm" onClick={() => setDetailVisitId(null)}>
-                  Close
+                  {t('common.close')}
                 </Button>
               </DialogFooter>
             </>

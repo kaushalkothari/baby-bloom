@@ -21,6 +21,7 @@ import {
 } from '@/lib/security/uploads';
 import { useHighlightScroll } from '@/hooks/useHighlightParam';
 import { cn } from '@/lib/utils';
+import { useTranslation } from 'react-i18next';
 
 const emptyBill = (): Partial<BillingRecord> => ({
   date: new Date().toISOString().split('T')[0],
@@ -36,6 +37,7 @@ function formatInr(amount: number): string {
 
 export default function Billing() {
   const { selectedChild, billing, addBilling, updateBilling, deleteBilling } = useApp();
+  const { t } = useTranslation();
   const [searchParams] = useSearchParams();
   const highlight = searchParams.get('highlight');
   const [open, setOpen] = useState(false);
@@ -88,7 +90,7 @@ export default function Billing() {
     }
   }, [childBills, focusedBillId]);
 
-  if (!selectedChild) return <p className="text-muted-foreground text-center py-20">Please select or add a child first.</p>;
+  if (!selectedChild) return <p className="text-muted-foreground text-center py-20">{t('empty.selectChildFirst')}</p>;
 
   const today = startOfDay(new Date());
   const setRange = (from: Date, to: Date) => {
@@ -109,10 +111,10 @@ export default function Billing() {
   };
 
   const handleSave = () => {
-    if (!form.hospitalName || !form.amount) { toast.error('Hospital and amount are required.'); return; }
+    if (!form.hospitalName || !form.amount) { toast.error(t('billing.requiredError')); return; }
     if (editing) {
       updateBilling({ ...editing, ...form } as BillingRecord);
-      toast.success('Updated!');
+      toast.success(t('billing.updated'));
     } else {
       addBilling({
         ...form,
@@ -120,7 +122,7 @@ export default function Billing() {
         childId: selectedChild.id,
         createdAt: new Date().toISOString(),
       } as BillingRecord);
-      toast.success('Bill added!');
+      toast.success(t('billing.added'));
     }
     setOpen(false);
     resetDialog();
@@ -157,7 +159,7 @@ export default function Billing() {
         }
         patchForm('receiptImage', data);
       } catch (err) {
-        toast.error(err instanceof Error ? err.message : 'Could not process this image.');
+        toast.error(err instanceof Error ? err.message : t('common.imageProcessFailed'));
       }
       input.value = '';
     };
@@ -172,8 +174,8 @@ export default function Billing() {
     <div className="space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
-          <h1 className="text-3xl font-display font-bold">Billing & Receipts</h1>
-          <p className="text-muted-foreground">Total spent: <span className="font-bold text-foreground tabular-nums">{formatInr(total)}</span></p>
+          <h1 className="text-3xl font-display font-bold">{t('pages.billing.title')}</h1>
+          <p className="text-muted-foreground">{t('billing.totalSpent')} <span className="font-bold text-foreground tabular-nums">{formatInr(total)}</span></p>
         </div>
         <Dialog
           open={open}
@@ -183,15 +185,19 @@ export default function Billing() {
             if (!o) resetDialog();
           }}
         >
-          <DialogTrigger asChild><Button className="gap-2"><Plus className="h-4 w-4" /> Add Bill</Button></DialogTrigger>
+          <DialogTrigger asChild><Button className="gap-2"><Plus className="h-4 w-4" /> {t('billing.addBill')}</Button></DialogTrigger>
           <DialogContent
             onFocusOutside={blockCloseWhilePicking}
             onPointerDownOutside={blockCloseWhilePicking}
           >
-            <DialogHeader><DialogTitle className="font-display">{editing ? 'Edit' : 'Add'} Bill</DialogTitle></DialogHeader>
+            <DialogHeader>
+              <DialogTitle className="font-display">
+                {t('billing.dialogTitle', { action: editing ? t('common.edit') : t('common.add') })}
+              </DialogTitle>
+            </DialogHeader>
             <div className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="bill-date">Date</Label>
+                <Label htmlFor="bill-date">{t('billing.form.date')}</Label>
                 <DatePicker
                   id="bill-date"
                   value={form.date || ''}
@@ -199,9 +205,9 @@ export default function Billing() {
                   disabled={(d) => isAfter(startOfDay(d), startOfDay(new Date()))}
                 />
               </div>
-              <div><Label>Hospital *</Label><Input value={form.hospitalName || ''} onChange={e => patchForm('hospitalName', e.target.value)} /></div>
+              <div><Label>{t('billing.form.hospitalRequired')}</Label><Input value={form.hospitalName || ''} onChange={e => patchForm('hospitalName', e.target.value)} /></div>
               <div className="space-y-2">
-                <Label htmlFor="bill-amount">Amount (INR) *</Label>
+                <Label htmlFor="bill-amount">{t('billing.form.amountInr')}</Label>
                 <div className="relative">
                   <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground" aria-hidden>
                     ₹
@@ -217,10 +223,10 @@ export default function Billing() {
                   />
                 </div>
               </div>
-              <div><Label>Description</Label><Textarea value={form.description || ''} onChange={e => patchForm('description', e.target.value)} /></div>
+              <div><Label>{t('billing.form.description')}</Label><Textarea value={form.description || ''} onChange={e => patchForm('description', e.target.value)} /></div>
 
               <div className="space-y-2">
-                <Label>Receipt image</Label>
+                <Label>{t('billing.form.receiptImage')}</Label>
                 <input
                   ref={fileRef}
                   type="file"
@@ -232,26 +238,26 @@ export default function Billing() {
                   <div className="rounded-lg border border-border bg-muted/20 overflow-hidden">
                     <img
                       src={form.receiptImage}
-                      alt="Receipt preview"
+                      alt={t('billing.receiptAlt')}
                       className="max-h-48 w-full object-contain bg-background"
                     />
                     <div className="border-t border-border px-3 py-2 flex gap-2 justify-end">
                       <Button type="button" variant="outline" size="sm" className="gap-1" onClick={triggerFilePick}>
-                        <Image className="h-4 w-4" /> Replace
+                        <Image className="h-4 w-4" /> {t('common.replace')}
                       </Button>
                       <Button type="button" variant="destructive" size="sm" onClick={() => patchForm('receiptImage', '')}>
-                        Remove
+                        {t('common.remove')}
                       </Button>
                     </div>
                   </div>
                 ) : (
                   <Button type="button" variant="outline" className="w-full gap-2" onClick={triggerFilePick}>
-                    <Image className="h-4 w-4" /> Upload receipt photo
+                    <Image className="h-4 w-4" /> {t('billing.form.uploadReceiptPhoto')}
                   </Button>
                 )}
               </div>
 
-              <Button onClick={handleSave} className="w-full">{editing ? 'Update' : 'Add Bill'}</Button>
+              <Button onClick={handleSave} className="w-full">{editing ? t('common.update') : t('billing.addBill')}</Button>
             </div>
           </DialogContent>
         </Dialog>
@@ -259,26 +265,26 @@ export default function Billing() {
 
       <div className="flex flex-wrap items-end gap-3">
         <div className="w-full sm:max-w-sm">
-          <Label htmlFor="bill-search" className="text-xs text-muted-foreground">Search</Label>
+          <Label htmlFor="bill-search" className="text-xs text-muted-foreground">{t('common.search')}</Label>
           <Input
             id="bill-search"
-            placeholder="Search bills..."
+            placeholder={t('billing.searchPlaceholder')}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
         </div>
         <div className="flex flex-wrap items-end gap-2">
           <Button type="button" variant="outline" size="sm" onClick={() => setRange(today, today)}>
-            Today
+            {t('common.today')}
           </Button>
           <Button type="button" variant="outline" size="sm" onClick={() => setRange(subDays(today, 6), today)}>
-            Last 7 days
+            {t('common.last7Days')}
           </Button>
           <Button type="button" variant="outline" size="sm" onClick={() => setRange(subDays(today, 29), today)}>
-            Last 30 days
+            {t('common.last30Days')}
           </Button>
           <Button type="button" variant="outline" size="sm" onClick={() => setRange(startOfMonth(today), endOfMonth(today))}>
-            This month
+            {t('common.thisMonth')}
           </Button>
           {(dateFrom || dateTo || search.trim()) && (
             <Button
@@ -291,12 +297,12 @@ export default function Billing() {
                 setDateTo('');
               }}
             >
-              Clear filters
+              {t('common.clearFilters')}
             </Button>
           )}
         </div>
         <div className="w-full sm:w-auto sm:min-w-[220px]">
-          <Label htmlFor="bill-date-from" className="text-xs text-muted-foreground">From</Label>
+          <Label htmlFor="bill-date-from" className="text-xs text-muted-foreground">{t('common.from')}</Label>
           <DatePicker
             id="bill-date-from"
             value={dateFrom}
@@ -311,7 +317,7 @@ export default function Billing() {
           />
         </div>
         <div className="w-full sm:w-auto sm:min-w-[220px]">
-          <Label htmlFor="bill-date-to" className="text-xs text-muted-foreground">To</Label>
+          <Label htmlFor="bill-date-to" className="text-xs text-muted-foreground">{t('common.to')}</Label>
           <DatePicker
             id="bill-date-to"
             value={dateTo}
@@ -330,7 +336,7 @@ export default function Billing() {
       {childBills.length === 0 ? (
         <div className="text-center py-20">
           <ReceiptIndianRupee className="h-16 w-16 text-muted-foreground/40 mx-auto mb-4" />
-          <p className="text-muted-foreground">No billing records yet.</p>
+          <p className="text-muted-foreground">{t('billing.empty')}</p>
         </div>
       ) : (
         <div className="relative space-y-4">
@@ -359,7 +365,7 @@ export default function Billing() {
                     size="icon"
                     onClick={() => {
                       deleteBilling(b.id);
-                      toast.success('Deleted.');
+                      toast.success(t('billing.deleted'));
                       setFocusedBillId((id) => (id === b.id ? null : id));
                     }}
                   >
@@ -378,7 +384,7 @@ export default function Billing() {
                       className="gap-1"
                       onClick={() => setPreviewImg(b.receiptImage!)}
                     >
-                      <Image className="h-3 w-3" /> View receipt
+                      <Image className="h-3 w-3" /> {t('billing.viewReceipt')}
                     </Button>
                   </div>
                 )}
@@ -391,8 +397,8 @@ export default function Billing() {
 
       <Dialog open={!!previewImg} onOpenChange={() => setPreviewImg(null)}>
         <DialogContent className="max-w-2xl">
-          <DialogHeader><DialogTitle>Receipt</DialogTitle></DialogHeader>
-          {previewImg && <img src={previewImg} alt="Receipt" className="w-full rounded-lg" />}
+          <DialogHeader><DialogTitle>{t('billing.receiptDialogTitle')}</DialogTitle></DialogHeader>
+          {previewImg && <img src={previewImg} alt={t('billing.receiptAlt')} className="w-full rounded-lg" />}
         </DialogContent>
       </Dialog>
     </div>

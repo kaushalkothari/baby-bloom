@@ -95,14 +95,21 @@ export function rowFileData(row: LinkedDocumentRow): string {
 }
 
 /** Human-friendly type label; uploads resolve via caller-provided `docTypes` table. */
+export type LinkedRowKindLabels = {
+  prescription: string;
+  vaccinationCard: string;
+  billingReceipt: string;
+};
+
 export function rowTypeLabel(
   row: LinkedDocumentRow,
   docTypes: { value: string; label: string }[],
+  linkedKinds?: LinkedRowKindLabels,
 ): string | undefined {
   if (row.kind === 'upload') return docTypes.find((t) => t.value === row.doc.type)?.label;
-  if (row.kind === 'prescription') return 'Prescription';
-  if (row.kind === 'vaccination') return 'Vaccination Card';
-  return 'Receipt';
+  if (row.kind === 'prescription') return linkedKinds?.prescription ?? 'Prescription';
+  if (row.kind === 'vaccination') return linkedKinds?.vaccinationCard ?? 'Vaccination Card';
+  return linkedKinds?.billingReceipt ?? 'Receipt';
 }
 
 function passesFilter(row: LinkedDocumentRow, filterType: string): boolean {

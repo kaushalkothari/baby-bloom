@@ -12,22 +12,24 @@ import {
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { APP_TITLE, APP_TAGLINE } from '@/lib/appMeta';
 import { getChildAvatar } from '@/lib/childAvatars';
+import { useTranslation } from 'react-i18next';
 
 const navItems = [
-  { title: 'Dashboard', url: '/', icon: LayoutDashboard },
-  { title: 'Children', url: '/children', icon: Users },
-  { title: 'Hospital Visits', url: '/visits', icon: Stethoscope },
-  { title: 'Growth Charts', url: '/growth', icon: TrendingUp },
-  { title: 'Vaccinations', url: '/vaccinations', icon: Syringe },
-  { title: 'Prescriptions', url: '/prescriptions', icon: Pill },
-  { title: 'Billing', url: '/billing', icon: ReceiptIndianRupee },
-  { title: 'Documents', url: '/documents', icon: FileText },
+  { key: 'nav.dashboard', url: '/', icon: LayoutDashboard },
+  { key: 'nav.children', url: '/children', icon: Users },
+  { key: 'nav.visits', url: '/visits', icon: Stethoscope },
+  { key: 'nav.growth', url: '/growth', icon: TrendingUp },
+  { key: 'nav.vaccinations', url: '/vaccinations', icon: Syringe },
+  { key: 'nav.prescriptions', url: '/prescriptions', icon: Pill },
+  { key: 'nav.billing', url: '/billing', icon: ReceiptIndianRupee },
+  { key: 'nav.documents', url: '/documents', icon: FileText },
 ];
 
 export function AppSidebar() {
   const { state } = useSidebar();
   const collapsed = state === 'collapsed';
   const { children, selectedChildId, setSelectedChildId } = useApp();
+  const { t } = useTranslation();
 
   return (
     <Sidebar collapsible="icon">
@@ -48,7 +50,7 @@ export function AppSidebar() {
         {!collapsed && children.length > 0 && (
           <Select value={selectedChildId || ''} onValueChange={setSelectedChildId}>
             <SelectTrigger className="mt-3">
-              <SelectValue placeholder="Select child" />
+              <SelectValue placeholder={t('children.selectChild')} />
             </SelectTrigger>
             <SelectContent>
               {children.map((c) => {
@@ -71,15 +73,15 @@ export function AppSidebar() {
 
       <SidebarContent>
         <SidebarGroup>
-          <SidebarGroupLabel>Navigation</SidebarGroupLabel>
+          <SidebarGroupLabel>{t('nav.navigation')}</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {navItems.map(item => (
-                <SidebarMenuItem key={item.title}>
+              {navItems.map((item) => (
+                <SidebarMenuItem key={item.key}>
                   <SidebarMenuButton asChild>
                     <NavLink to={item.url} end={item.url === '/'} className="hover:bg-sidebar-accent/50" activeClassName="bg-sidebar-accent text-sidebar-primary font-semibold">
                       <item.icon className="h-4 w-4 mr-2 shrink-0" />
-                      {!collapsed && <span>{item.title}</span>}
+                      {!collapsed && <span>{t(item.key)}</span>}
                     </NavLink>
                   </SidebarMenuButton>
                 </SidebarMenuItem>

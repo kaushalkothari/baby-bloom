@@ -1,4 +1,5 @@
-import { ReactNode, useState, useEffect, useMemo } from 'react';
+import { ReactNode, useState, useEffect, useMemo, useRef } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useApp } from '@/lib/contexts/AppContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -7,15 +8,15 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
-import { Separator } from '@/components/ui/separator';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
-import { Plus, Syringe, Check, Image as ImageIcon, ChevronDown, ChevronUp, ExternalLink } from 'lucide-react';
+import { Plus, Syringe, Check, Image as ImageIcon, ExternalLink, ChevronDown, ChevronUp } from 'lucide-react';
 import { format, startOfDay, isAfter } from 'date-fns';
 import { DatePicker } from '@/components/ui/date-picker';
 import { vaccineSchedule, getVaccineDueDate, immunizationReferenceLinks } from '@/lib/data/vaccineSchedule';
 import { Vaccination, VaccinationStatus } from '@/types';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { useTranslation } from 'react-i18next';
 
 type CompleteFormFields = {
   location: string;
@@ -37,24 +38,23 @@ type CompleteContext = {
   record?: Vaccination;
 };
 
-const AGE_BUCKET_LABELS: Record<number, string> = {
-  0: 'At birth',
-  6: '6 weeks',
-  10: '10 weeks',
-  14: '14 weeks',
-  39: '9–12 months',
-  68: '16–24 months',
-  260: '5–6 years',
-  520: '10 years',
-  832: '16 years',
-};
-
-function ageBucketLabel(ageInWeeks: number): string {
-  if (ageInWeeks in AGE_BUCKET_LABELS) return AGE_BUCKET_LABELS[ageInWeeks];
+function ageBucketLabel(ageInWeeks: number, t: (key: string, opts?: any) => string): string {
+  const map: Record<number, string> = {
+    0: t('vaccinations.ageBuckets.atBirth'),
+    6: t('vaccinations.ageBuckets.weeks6'),
+    10: t('vaccinations.ageBuckets.weeks10'),
+    14: t('vaccinations.ageBuckets.weeks14'),
+    39: t('vaccinations.ageBuckets.months9to12'),
+    68: t('vaccinations.ageBuckets.months16to24'),
+    260: t('vaccinations.ageBuckets.years5to6'),
+    520: t('vaccinations.ageBuckets.years10'),
+    832: t('vaccinations.ageBuckets.years16'),
+  };
+  if (ageInWeeks in map) return map[ageInWeeks];
   // Fallback for any new schedule items.
-  if (ageInWeeks < 52) return `${ageInWeeks} weeks`;
+  if (ageInWeeks < 52) return t('vaccinations.ageBuckets.weeks', { count: ageInWeeks });
   const years = Math.round((ageInWeeks / 52) * 10) / 10;
-  return `${years} years`;
+  return t('vaccinations.ageBuckets.years', { count: years });
 }
 
 function todayIsoDate() {
@@ -81,14 +81,14 @@ function prefillCompleteForm(record: Partial<Vaccination> | undefined): Complete
   };
 }
 
-function validateCompleteForm(f: CompleteFormFields): string | null {
-  if (!f.location.trim()) return 'Hospital name is required.';
+function validateCompleteForm(f: CompleteFormFields, t: (key: string) => string): string | null {
+  if (!f.location.trim()) return t('vaccinations.errors.hospitalRequired');
   return null;
 }
 
 function InfoRow({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <p>
+    <p className="text-sm">
       <span className="text-muted-foreground">{label}:</span> {children}
     </p>
   );
@@ -113,16 +113,19 @@ function statusBadgeClass(status: VaccinationStatus): string {
 
 export default function Vaccinations() {
   const { selectedChild, vaccinations, addVaccination, updateVaccination } = useApp();
+  const { t } = useTranslation();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const cardScrollRefs = useRef<Map<string, HTMLDivElement | null>>(new Map());
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState<Partial<Vaccination>>({});
   const [photoViewOpen, setPhotoViewOpen] = useState<string | null>(null);
   const [filter, setFilter] = useState<'all' | VaccinationStatus>('all');
-  const [expandedCard, setExpandedCard] = useState<string | null>(null);
-  const [recordOpen, setRecordOpen] = useState<string | null>(null);
   const [completeOpen, setCompleteOpen] = useState(false);
   const [completeContext, setCompleteContext] = useState<CompleteContext | null>(null);
   const [completeForm, setCompleteForm] = useState<CompleteFormFields>(() => prefillCompleteForm(undefined));
   const [focusedVaxKey, setFocusedVaxKey] = useState<string | null>(null);
+  const [expandedCard, setExpandedCard] = useState<string | null>(null);
+  const [recordOpen, setRecordOpen] = useState<string | null>(null);
 
   const childVax = useMemo(
     () => (selectedChild ? vaccinations.filter((v) => v.childId === selectedChild.id) : []),
@@ -152,10 +155,10 @@ export default function Vaccinations() {
           .filter((r) => r.ageInWeeks === ageInWeeks)
           .sort((a, b) => a.dueDate.localeCompare(b.dueDate));
         const shown = filter === 'all' ? rows : rows.filter((r) => r.status === filter);
-        return { ageInWeeks, label: ageBucketLabel(ageInWeeks), rows, shown };
+        return { ageInWeeks, label: ageBucketLabel(ageInWeeks, t), rows, shown };
       })
       .filter((g) => filter === 'all' || g.shown.length > 0);
-  }, [selectedChild, scheduleWithStatus, filter]);
+  }, [selectedChild, scheduleWithStatus, filter, t]);
 
   useEffect(() => {
     if (!focusedVaxKey) return;
@@ -165,7 +168,42 @@ export default function Vaccinations() {
     if (!stillThere) setFocusedVaxKey(null);
   }, [focusedVaxKey, grouped]);
 
-  if (!selectedChild) return <p className="text-muted-foreground text-center py-20">Please select or add a child first.</p>;
+  useEffect(() => {
+    const inView = (key: string | null) =>
+      key &&
+      grouped.some((grp) => grp.shown.some((vs) => `${grp.ageInWeeks}::${vs.name}` === key));
+    if (!inView(expandedCard)) setExpandedCard(null);
+    if (!inView(recordOpen)) setRecordOpen(null);
+  }, [expandedCard, recordOpen, grouped]);
+
+  useEffect(() => {
+    const ageRaw = searchParams.get('ageWeeks');
+    const vaxName = searchParams.get('vax');
+    if (ageRaw === null || !vaxName) return;
+    const key = `${ageRaw}::${vaxName}`;
+    setFilter('all');
+    setFocusedVaxKey(key);
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.delete('ageWeeks');
+        next.delete('vax');
+        return next;
+      },
+      { replace: true },
+    );
+  }, [searchParams, setSearchParams]);
+
+  useEffect(() => {
+    if (!focusedVaxKey) return;
+    const raf = requestAnimationFrame(() => {
+      const el = cardScrollRefs.current.get(focusedVaxKey);
+      el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [focusedVaxKey]);
+
+  if (!selectedChild) return <p className="text-muted-foreground text-center py-20">{t('empty.selectChildFirst')}</p>;
 
   const openCompleteScheduled = (vs: ScheduleRow) => {
     setCompleteForm(prefillCompleteForm(vs.record));
@@ -174,7 +212,7 @@ export default function Vaccinations() {
   };
 
   const submitComplete = () => {
-    const err = validateCompleteForm(completeForm);
+    const err = validateCompleteForm(completeForm, t);
     if (err) {
       toast.error(err);
       return;
@@ -205,14 +243,14 @@ export default function Vaccinations() {
         createdAt: new Date().toISOString(),
       });
     }
-    toast.success(`${vaccineName} marked as completed!`);
+    toast.success(t('vaccinations.markedCompleted', { name: vaccineName }));
     setCompleteOpen(false);
     setCompleteContext(null);
   };
 
   const handleAddCustom = () => {
     if (!form.vaccineName || !form.dueDate) {
-      toast.error('Vaccine name and due date are required.');
+      toast.error(t('vaccinations.vaccineNameRequired'));
       return;
     }
     addVaccination({
@@ -221,7 +259,7 @@ export default function Vaccinations() {
       childId: selectedChild.id,
       createdAt: new Date().toISOString(),
     } as Vaccination);
-    toast.success('Vaccination added!');
+    toast.success(t('vaccinations.vaccinationAdded'));
     setOpen(false);
     setForm({});
   };
@@ -229,7 +267,7 @@ export default function Vaccinations() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-3">
-        <h1 className="text-3xl font-display font-bold">Vaccinations</h1>
+        <h1 className="text-3xl font-display font-bold">{t('vaccinations.title')}</h1>
         <Dialog
           open={open}
           onOpenChange={(o) => {
@@ -239,20 +277,20 @@ export default function Vaccinations() {
         >
           <DialogTrigger asChild>
             <Button className="gap-2">
-              <Plus className="h-4 w-4" /> Add Custom
+              <Plus className="h-4 w-4" /> {t('vaccinations.customAdd')}
             </Button>
           </DialogTrigger>
           <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-md">
             <DialogHeader>
-              <DialogTitle className="font-display">Add Custom Vaccination</DialogTitle>
+              <DialogTitle className="font-display">{t('vaccinations.addCustomTitle')}</DialogTitle>
             </DialogHeader>
             <div className="space-y-4">
               <div>
-                <Label>Vaccine Name *</Label>
+                <Label>{t('vaccinations.form.vaccineName')} *</Label>
                 <Input value={form.vaccineName || ''} onChange={e => setForm(p => ({ ...p, vaccineName: e.target.value }))} />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="vax-due">Due Date *</Label>
+                <Label htmlFor="vax-due">{t('vaccinations.form.dueDate')} *</Label>
                 <DatePicker
                   id="vax-due"
                   value={form.dueDate || ''}
@@ -262,7 +300,7 @@ export default function Vaccinations() {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="vax-completed">Date given</Label>
+                <Label htmlFor="vax-completed">{t('vaccinations.form.dateGiven')}</Label>
                 <DatePicker
                   id="vax-completed"
                   value={form.completedDate || ''}
@@ -273,40 +311,40 @@ export default function Vaccinations() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="vax-hospital">Hospital name</Label>
+                <Label htmlFor="vax-hospital">{t('vaccinations.form.hospitalName')}</Label>
                 <Input
                   id="vax-hospital"
                   value={form.location || ''}
                   onChange={(e) => setForm((p) => ({ ...p, location: e.target.value }))}
-                  placeholder="Clinic or hospital"
+                  placeholder={t('vaccinations.form.clinicOrHospital')}
                 />
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="space-y-2">
-                  <Label htmlFor="vax-city">City</Label>
+                  <Label htmlFor="vax-city">{t('vaccinations.form.city')}</Label>
                   <Input
                     id="vax-city"
                     value={form.locationCity || ''}
                     onChange={(e) => setForm((p) => ({ ...p, locationCity: e.target.value }))}
-                    placeholder="City"
+                    placeholder={t('vaccinations.form.city')}
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="vax-state">State</Label>
+                  <Label htmlFor="vax-state">{t('vaccinations.form.state')}</Label>
                   <Input
                     id="vax-state"
                     value={form.locationState || ''}
                     onChange={(e) => setForm((p) => ({ ...p, locationState: e.target.value }))}
-                    placeholder="State"
+                    placeholder={t('vaccinations.form.state')}
                   />
                 </div>
               </div>
-              <div><Label>Administered by</Label><Input value={form.administeredBy || ''} onChange={e => setForm(p => ({ ...p, administeredBy: e.target.value }))} placeholder="Nurse or doctor" /></div>
-              <div><Label>Site</Label><Input value={form.administrationSite || ''} onChange={e => setForm(p => ({ ...p, administrationSite: e.target.value }))} placeholder="e.g. Left thigh" /></div>
-              <div><Label>Vaccine company</Label><Input value={form.vaccineManufacturer || ''} onChange={e => setForm(p => ({ ...p, vaccineManufacturer: e.target.value }))} /></div>
-              <div><Label>Batch number</Label><Input value={form.batchNumber || ''} onChange={e => setForm(p => ({ ...p, batchNumber: e.target.value }))} /></div>
+              <div><Label>{t('vaccinations.form.administeredBy')}</Label><Input value={form.administeredBy || ''} onChange={e => setForm(p => ({ ...p, administeredBy: e.target.value }))} placeholder={t('vaccinations.form.nurseOrDoctor')} /></div>
+              <div><Label>{t('vaccinations.form.site')}</Label><Input value={form.administrationSite || ''} onChange={e => setForm(p => ({ ...p, administrationSite: e.target.value }))} placeholder={t('vaccinations.form.siteExample')} /></div>
+              <div><Label>{t('vaccinations.form.vaccineCompany')}</Label><Input value={form.vaccineManufacturer || ''} onChange={e => setForm(p => ({ ...p, vaccineManufacturer: e.target.value }))} /></div>
+              <div><Label>{t('vaccinations.form.batchNumber')}</Label><Input value={form.batchNumber || ''} onChange={e => setForm(p => ({ ...p, batchNumber: e.target.value }))} /></div>
               <div className="space-y-2">
-                <Label htmlFor="vax-mfg">Manufacturing date</Label>
+                <Label htmlFor="vax-mfg">{t('vaccinations.form.manufacturingDate')}</Label>
                 <DatePicker
                   id="vax-mfg"
                   value={form.manufacturingDate || ''}
@@ -317,7 +355,7 @@ export default function Vaccinations() {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="vax-expiry">Expiry date</Label>
+                <Label htmlFor="vax-expiry">{t('vaccinations.form.expiryDate')}</Label>
                 <DatePicker
                   id="vax-expiry"
                   value={form.expiryDate || ''}
@@ -327,19 +365,19 @@ export default function Vaccinations() {
                   toYear={new Date().getFullYear() + 15}
                 />
               </div>
-              <div><Label>Notes</Label><Textarea value={form.notes || ''} onChange={e => setForm(p => ({ ...p, notes: e.target.value }))} /></div>
+              <div><Label>{t('vaccinations.form.notes')}</Label><Textarea value={form.notes || ''} onChange={e => setForm(p => ({ ...p, notes: e.target.value }))} /></div>
 
-              <Button onClick={handleAddCustom} className="w-full">Add Vaccination</Button>
+              <Button onClick={handleAddCustom} className="w-full">{t('dashboard.addVaccination')}</Button>
             </div>
           </DialogContent>
         </Dialog>
       </div>
 
       <div className="flex items-center gap-2 text-sm">
-        <span className="text-muted-foreground">Filter:</span>
+        <span className="text-muted-foreground">{t('vaccinations.filterLabel')}</span>
         {(['all', 'upcoming', 'overdue', 'completed'] as const).map(f => (
           <Button key={f} variant={filter === f ? 'default' : 'outline'} size="sm" onClick={() => setFilter(f)} className="capitalize">
-            {f}
+            {t(`vaccinations.status.${f}`)}
           </Button>
         ))}
       </div>
@@ -358,12 +396,12 @@ export default function Vaccinations() {
                 <div className="space-y-0.5">
                   <h2 className="text-lg font-display font-semibold">{g.label}</h2>
                   <p className="text-xs text-muted-foreground">
-                    {g.rows.length} vaccines · {counts.completed} completed · {counts.overdue} overdue · {counts.upcoming} upcoming
+                    {g.rows.length} {t('vaccinations.vaccines')} · {counts.completed} {t('vaccinations.completed')} · {counts.overdue} {t('vaccinations.overdue')} · {counts.upcoming} {t('vaccinations.upcoming')}
                   </p>
                 </div>
                 {filter !== 'all' && (
                   <Badge variant="outline" className="capitalize">
-                    Showing: {filter} ({g.shown.length})
+                    {t('vaccinations.showing')}: {t(`vaccinations.status.${filter}`)} ({g.shown.length})
                   </Badge>
                 )}
               </div>
@@ -372,191 +410,252 @@ export default function Vaccinations() {
                 {g.shown.map((vs: ScheduleRow) => {
                   const cardFocusKey = `${g.ageInWeeks}::${vs.name}`;
                   const isFocused = focusedVaxKey === cardFocusKey;
-                  const isExpanded = expandedCard === vs.name;
                   const isCompleted = vs.status === 'completed';
                   const record = vs.record;
+                  const isExpanded = expandedCard === cardFocusKey;
+                  const isRecordOpen = recordOpen === cardFocusKey;
 
                   const hasRecord =
-                    !!record && (
-                      !!record.location ||
-                      !!record.locationCity ||
-                      !!record.locationState ||
-                      !!record.administeredBy ||
-                      !!record.administrationSite ||
-                      !!record.vaccineManufacturer ||
-                      !!record.batchNumber ||
-                      !!record.manufacturingDate ||
-                      !!record.expiryDate
-                    );
-                  const hasNotes = !!vs.remarks || (vs.sideEffects && vs.sideEffects.length > 0);
-                  const isRecordOpen = recordOpen === vs.name;
+                    !!record &&
+                    (isCompleted ||
+                      !!(
+                        record.completedDate ||
+                        record.location ||
+                        record.locationCity ||
+                        record.locationState ||
+                        record.administeredBy ||
+                        record.administrationSite ||
+                        record.vaccineManufacturer ||
+                        record.batchNumber ||
+                        record.manufacturingDate ||
+                        record.expiryDate ||
+                        record.notes?.trim() ||
+                        record.cardPhoto
+                      ));
+                  const hasNotes = !!vs.remarks || !!(vs.sideEffects && vs.sideEffects.length > 0);
 
                   return (
-                    <Card
+                    <div
                       key={vs.name}
-                      className={cn(
-                        'flex h-full flex-col cursor-pointer transition-[box-shadow,transform,opacity] duration-200',
-                        isCompleted && 'opacity-75',
-                        isFocused && 'relative z-10 scale-[1.01] shadow-lg ring-2 ring-primary ring-offset-2 ring-offset-background',
-                      )}
-                      onClick={() => setFocusedVaxKey((cur) => (cur === cardFocusKey ? null : cardFocusKey))}
+                      className="h-full min-h-0"
+                      ref={(el) => {
+                        if (el) cardScrollRefs.current.set(cardFocusKey, el);
+                        else cardScrollRefs.current.delete(cardFocusKey);
+                      }}
                     >
-                      <CardHeader className="flex flex-row items-center justify-between pb-2">
-                        <div>
-                          <CardTitle className="text-base font-display flex items-center gap-2">
-                            <Syringe className="h-4 w-4 text-primary" /> {vs.name}
-                          </CardTitle>
-                          <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
-                            {vs.description}
-                          </p>
-                        </div>
-                        <Badge className={statusBadgeClass(vs.status)}>{vs.status}</Badge>
-                      </CardHeader>
-                      <CardContent className="flex flex-1 flex-col space-y-2">
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="text-sm space-y-1">
-                            {isCompleted && record?.completedDate ? (
-                              <>
-                                <InfoRow label="Done">
-                                  {format(new Date(record.completedDate), 'PP')}
-                                </InfoRow>
-                                <p className="text-xs text-muted-foreground">
-                                  Due {format(new Date(vs.dueDate), 'PP')}
-                                </p>
-                              </>
-                            ) : (
-                              <InfoRow label="Due">{format(new Date(vs.dueDate), 'PP')}</InfoRow>
-                            )}
-                            {vs.dose && <InfoRow label="Dose">{vs.dose}</InfoRow>}
-                            {vs.route && <InfoRow label="Route">{vs.route}</InfoRow>}
-                            {record?.administrationSite
-                              ? <InfoRow label="Site">{record.administrationSite}</InfoRow>
-                              : vs.site && <InfoRow label="Recommended site">{vs.site}</InfoRow>}
+                      <Card
+                        className={cn(
+                          'flex h-full flex-col cursor-pointer transition-[box-shadow,transform,opacity] duration-200',
+                          isCompleted && 'opacity-75',
+                          isFocused && 'relative z-10 scale-[1.01] shadow-lg ring-2 ring-primary ring-offset-2 ring-offset-background',
+                        )}
+                        onClick={() => setFocusedVaxKey((cur) => (cur === cardFocusKey ? null : cardFocusKey))}
+                      >
+                        <CardHeader className="flex flex-row items-center justify-between pb-2">
+                          <div className="min-w-0">
+                            <CardTitle className="text-base font-display flex items-center gap-2">
+                              <Syringe className="h-4 w-4 shrink-0 text-primary" />{' '}
+                              <span className="truncate">{vs.name}</span>
+                            </CardTitle>
+                            {vs.description ? (
+                              <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{vs.description}</p>
+                            ) : null}
                           </div>
-                          <div className="flex flex-col items-end gap-2 self-start" onClick={(e) => e.stopPropagation()}>
-                            <div className="flex items-center gap-1">
-                              {record?.cardPhoto && (
+                          <Badge className={cn('shrink-0', statusBadgeClass(vs.status))}>
+                            {t(`vaccinations.status.${vs.status}`)}
+                          </Badge>
+                        </CardHeader>
+                        <CardContent className="flex flex-1 flex-col space-y-2">
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="text-sm space-y-1 min-w-0">
+                              {isCompleted && record?.completedDate ? (
+                                <>
+                                  <InfoRow label={t('vaccinations.cards.doneLabel')}>
+                                    {format(new Date(record.completedDate), 'PP')}
+                                  </InfoRow>
+                                  <p className="text-xs text-muted-foreground">
+                                    {t('vaccinations.cards.dueLabel')}{' '}
+                                    {format(new Date(vs.dueDate), 'PP')}
+                                  </p>
+                                </>
+                              ) : (
+                                <InfoRow label={t('vaccinations.cards.dueLabel')}>
+                                  {format(new Date(vs.dueDate), 'PP')}
+                                </InfoRow>
+                              )}
+                              {vs.dose && <InfoRow label={t('vaccinations.cards.dose')}>{vs.dose}</InfoRow>}
+                              {vs.route && <InfoRow label={t('vaccinations.cards.route')}>{vs.route}</InfoRow>}
+                              {record?.administrationSite ? (
+                                <InfoRow label={t('vaccinations.cards.site')}>{record.administrationSite}</InfoRow>
+                              ) : (
+                                vs.site && (
+                                  <InfoRow label={t('vaccinations.cards.recommendedSite')}>{vs.site}</InfoRow>
+                                )
+                              )}
+                            </div>
+                            <div
+                              className="flex flex-col items-end gap-2 shrink-0 self-start"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <div className="flex items-center gap-1">
+                                {record?.cardPhoto && (
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    className="gap-1"
+                                    onClick={() => setPhotoViewOpen(record.cardPhoto!)}
+                                    aria-label={t('common.viewImage')}
+                                  >
+                                    <ImageIcon className="h-3 w-3" />
+                                  </Button>
+                                )}
                                 <Button
                                   size="sm"
-                                  variant="ghost"
+                                  variant={isCompleted ? 'secondary' : 'outline'}
                                   className="gap-1"
-                                  onClick={() => setPhotoViewOpen(record.cardPhoto!)}
+                                  onClick={() => openCompleteScheduled(vs)}
                                 >
-                                  <ImageIcon className="h-3 w-3" />
+                                  <Check className="h-3 w-3" />{' '}
+                                  {isCompleted ? t('vaccinations.actions.edit') : t('vaccinations.actions.done')}
+                                </Button>
+                              </div>
+                              {hasRecord && (
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="sm"
+                                  className="text-xs text-muted-foreground h-7 px-2"
+                                  onClick={() => setRecordOpen(isRecordOpen ? null : cardFocusKey)}
+                                >
+                                  {isRecordOpen
+                                    ? t('vaccinations.actions.hideRecord')
+                                    : t('vaccinations.actions.viewRecord')}
                                 </Button>
                               )}
-                              <Button
-                                size="sm"
-                                variant={isCompleted ? 'secondary' : 'outline'}
-                                className="gap-1"
-                                onClick={() => openCompleteScheduled(vs)}
-                              >
-                                <Check className="h-3 w-3" /> {isCompleted ? 'Edit' : 'Done'}
-                              </Button>
                             </div>
-                            {hasRecord && (
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="text-xs text-muted-foreground h-7 px-2"
-                                onClick={() =>
-                                  setRecordOpen(isRecordOpen ? null : vs.name)
-                                }
-                              >
-                                {isRecordOpen ? 'Hide record' : 'View record'}
-                              </Button>
-                            )}
                           </div>
-                        </div>
 
-                        {(hasRecord || hasNotes) && (
-                          <div className="mt-auto space-y-2" onClick={(e) => e.stopPropagation()}>
-                            {hasRecord && isRecordOpen && record && (
-                              <div className="rounded-md bg-muted/40 p-3">
-                                <DetailsSection title="Administration record">
-                                  {record.location && (
-                                    <InfoRow label="Hospital">{record.location}</InfoRow>
-                                  )}
-                                  {record.locationCity && (
-                                    <InfoRow label="City">{record.locationCity}</InfoRow>
-                                  )}
-                                  {record.locationState && (
-                                    <InfoRow label="State">{record.locationState}</InfoRow>
-                                  )}
-                                  {record.administeredBy && (
-                                    <InfoRow label="By">{record.administeredBy}</InfoRow>
-                                  )}
-                                  {record.administrationSite && (
-                                    <InfoRow label="Site given">{record.administrationSite}</InfoRow>
-                                  )}
-                                  {record.vaccineManufacturer && (
-                                    <InfoRow label="Company">{record.vaccineManufacturer}</InfoRow>
-                                  )}
-                                  {record.batchNumber && (
-                                    <InfoRow label="Batch">{record.batchNumber}</InfoRow>
-                                  )}
-                                  {record.manufacturingDate && (
-                                    <InfoRow label="Mfg">
-                                      {format(new Date(record.manufacturingDate), 'PP')}
-                                    </InfoRow>
-                                  )}
-                                  {record.expiryDate && (
-                                    <InfoRow label="Expiry">
-                                      {format(new Date(record.expiryDate), 'PP')}
-                                    </InfoRow>
-                                  )}
-                                </DetailsSection>
-                              </div>
-                            )}
+                          {(hasRecord || hasNotes) && (
+                            <div className="mt-auto space-y-2" onClick={(e) => e.stopPropagation()}>
+                              {hasRecord && isRecordOpen && record && (
+                                <div className="rounded-md bg-muted/40 p-3">
+                                  <DetailsSection title={t('vaccinations.sections.administrationRecord')}>
+                                    {record.completedDate && (
+                                      <InfoRow label={t('vaccinations.form.dateGiven')}>
+                                        {format(new Date(record.completedDate), 'PP')}
+                                      </InfoRow>
+                                    )}
+                                    {record.location && (
+                                      <InfoRow label={t('vaccinations.form.hospitalName')}>{record.location}</InfoRow>
+                                    )}
+                                    {record.locationCity && (
+                                      <InfoRow label={t('vaccinations.form.city')}>{record.locationCity}</InfoRow>
+                                    )}
+                                    {record.locationState && (
+                                      <InfoRow label={t('vaccinations.form.state')}>{record.locationState}</InfoRow>
+                                    )}
+                                    {record.administeredBy && (
+                                      <InfoRow label={t('vaccinations.form.administeredBy')}>
+                                        {record.administeredBy}
+                                      </InfoRow>
+                                    )}
+                                    {record.administrationSite && (
+                                      <InfoRow label={t('vaccinations.form.site')}>{record.administrationSite}</InfoRow>
+                                    )}
+                                    {record.vaccineManufacturer && (
+                                      <InfoRow label={t('vaccinations.form.vaccineCompany')}>
+                                        {record.vaccineManufacturer}
+                                      </InfoRow>
+                                    )}
+                                    {record.batchNumber && (
+                                      <InfoRow label={t('vaccinations.form.batchNumber')}>{record.batchNumber}</InfoRow>
+                                    )}
+                                    {record.manufacturingDate && (
+                                      <InfoRow label={t('vaccinations.form.manufacturingDate')}>
+                                        {format(new Date(record.manufacturingDate), 'PP')}
+                                      </InfoRow>
+                                    )}
+                                    {record.expiryDate && (
+                                      <InfoRow label={t('vaccinations.form.expiryDate')}>
+                                        {format(new Date(record.expiryDate), 'PP')}
+                                      </InfoRow>
+                                    )}
+                                    {record.notes?.trim() && (
+                                      <p className="whitespace-pre-wrap">
+                                        <span className="text-muted-foreground">{t('vaccinations.form.notes')}:</span>{' '}
+                                        {record.notes.trim()}
+                                      </p>
+                                    )}
+                                    {record.cardPhoto && (
+                                      <p className="text-muted-foreground">
+                                        {t('vaccinations.photoViewer.title')}:{' '}
+                                        <button
+                                          type="button"
+                                          className="text-primary underline-offset-2 hover:underline"
+                                          onClick={() => setPhotoViewOpen(record.cardPhoto!)}
+                                        >
+                                          {t('common.viewImage')}
+                                        </button>
+                                      </p>
+                                    )}
+                                  </DetailsSection>
+                                </div>
+                              )}
 
-                            {hasNotes && (
-                              <div className="space-y-2">
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  className="w-full text-xs text-muted-foreground gap-1 h-7"
-                                  onClick={() => setExpandedCard(isExpanded ? null : vs.name)}
-                                >
-                                  {isExpanded ? (
-                                    <ChevronUp className="h-3 w-3" />
-                                  ) : (
-                                    <ChevronDown className="h-3 w-3" />
-                                  )}
-                                  {isExpanded ? 'Hide details' : 'More details'}
-                                </Button>
+                              {hasNotes && (
+                                <div className="space-y-2">
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    className="w-full text-xs text-muted-foreground gap-1 h-7"
+                                    onClick={() =>
+                                      setExpandedCard(isExpanded ? null : cardFocusKey)
+                                    }
+                                  >
+                                    {isExpanded ? (
+                                      <ChevronUp className="h-3 w-3" />
+                                    ) : (
+                                      <ChevronDown className="h-3 w-3" />
+                                    )}
+                                    {isExpanded
+                                      ? t('vaccinations.actions.hideDetails')
+                                      : t('vaccinations.actions.moreDetails')}
+                                  </Button>
 
-                                {isExpanded && (
-                                  <div className="rounded-md bg-muted/50 p-3">
-                                    <DetailsSection title="Notes">
-                                      {vs.remarks && (
-                                        <p>
-                                          <span className="font-medium text-foreground/80">
-                                            Remarks:
-                                          </span>{' '}
-                                          {vs.remarks}
-                                        </p>
-                                      )}
-                                      {vs.sideEffects && vs.sideEffects.length > 0 && (
-                                        <div>
-                                          <p className="font-medium text-foreground/80 mb-1">
-                                            Potential side effects:
+                                  {isExpanded && (
+                                    <div className="rounded-md bg-muted/50 p-3">
+                                      <DetailsSection title={t('vaccinations.sections.notes')}>
+                                        {vs.remarks && (
+                                          <p>
+                                            <span className="font-medium text-foreground/80">
+                                              {t('vaccinations.notes.remarks')}:
+                                            </span>{' '}
+                                            {vs.remarks}
                                           </p>
-                                          <ul className="list-disc list-inside space-y-0.5 text-muted-foreground">
-                                            {vs.sideEffects.map((se, i) => (
-                                              <li key={i}>{se}</li>
-                                            ))}
-                                          </ul>
-                                        </div>
-                                      )}
-                                    </DetailsSection>
-                                  </div>
-                                )}
-                              </div>
-                            )}
-                          </div>
-                        )}
-                      </CardContent>
-                    </Card>
+                                        )}
+                                        {vs.sideEffects && vs.sideEffects.length > 0 && (
+                                          <div>
+                                            <p className="font-medium text-foreground/80 mb-1">
+                                              {t('vaccinations.notes.potentialSideEffects')}
+                                            </p>
+                                            <ul className="list-disc list-inside space-y-0.5 text-muted-foreground">
+                                              {vs.sideEffects.map((se, i) => (
+                                                <li key={i}>{se}</li>
+                                              ))}
+                                            </ul>
+                                          </div>
+                                        )}
+                                      </DetailsSection>
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </CardContent>
+                      </Card>
+                    </div>
                   );
                 })}
               </div>
@@ -568,7 +667,7 @@ export default function Vaccinations() {
       {/* Reference links */}
       <Card className="border-dashed">
         <CardHeader className="pb-2">
-          <CardTitle className="text-sm font-medium text-muted-foreground">Reference Links</CardTitle>
+          <CardTitle className="text-sm font-medium text-muted-foreground">{t('vaccinations.sections.referenceLinks')}</CardTitle>
         </CardHeader>
         <CardContent>
           <ul className="space-y-1.5 text-sm">
@@ -600,16 +699,16 @@ export default function Vaccinations() {
           <DialogHeader>
             <DialogTitle className="font-display">
               {completeContext
-                ? `Mark completed — ${completeContext.vaccineName}`
-                : 'Mark vaccination completed'}
+                ? t('vaccinations.completeDialog.titleWithName', { name: completeContext.vaccineName })
+                : t('vaccinations.completeDialog.titleGeneric')}
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-5">
             <section className="space-y-3">
-              <h3 className="text-sm font-semibold text-muted-foreground">When &amp; where</h3>
+              <h3 className="text-sm font-semibold text-muted-foreground">{t('vaccinations.completeDialog.whenWhere')}</h3>
               <div className="space-y-2">
-                <Label htmlFor="complete-done">Date given</Label>
-                <p className="text-xs text-muted-foreground">Defaults to today if not set.</p>
+                <Label htmlFor="complete-done">{t('vaccinations.form.dateGiven')}</Label>
+                <p className="text-xs text-muted-foreground">{t('vaccinations.completeDialog.defaultsToday')}</p>
                 <DatePicker
                   id="complete-done"
                   value={completeForm.completedDate}
@@ -619,54 +718,54 @@ export default function Vaccinations() {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="complete-hospital">Hospital name *</Label>
+                <Label htmlFor="complete-hospital">{t('vaccinations.form.hospitalName')} *</Label>
                 <Input
                   id="complete-hospital"
                   value={completeForm.location}
                   onChange={(e) => setCompleteForm((p) => ({ ...p, location: e.target.value }))}
-                  placeholder="Clinic or hospital"
+                  placeholder={t('vaccinations.form.clinicOrHospital')}
                 />
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="space-y-2">
-                  <Label htmlFor="complete-city">City</Label>
+                  <Label htmlFor="complete-city">{t('vaccinations.form.city')}</Label>
                   <Input
                     id="complete-city"
                     value={completeForm.locationCity}
                     onChange={(e) => setCompleteForm((p) => ({ ...p, locationCity: e.target.value }))}
-                    placeholder="City"
+                    placeholder={t('vaccinations.form.city')}
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="complete-state">State</Label>
+                  <Label htmlFor="complete-state">{t('vaccinations.form.state')}</Label>
                   <Input
                     id="complete-state"
                     value={completeForm.locationState}
                     onChange={(e) => setCompleteForm((p) => ({ ...p, locationState: e.target.value }))}
-                    placeholder="State"
+                    placeholder={t('vaccinations.form.state')}
                   />
                 </div>
               </div>
               <div>
-                <Label htmlFor="complete-by">Administered by</Label>
+                <Label htmlFor="complete-by">{t('vaccinations.form.administeredBy')}</Label>
                 <Input
                   id="complete-by"
                   value={completeForm.administeredBy}
                   onChange={(e) => setCompleteForm((p) => ({ ...p, administeredBy: e.target.value }))}
-                  placeholder="Nurse or doctor"
+                  placeholder={t('vaccinations.form.nurseOrDoctor')}
                 />
               </div>
             </section>
 
             <section className="space-y-3">
-              <h3 className="text-sm font-semibold text-muted-foreground">How it was given</h3>
+              <h3 className="text-sm font-semibold text-muted-foreground">{t('vaccinations.completeDialog.howGiven')}</h3>
               <div>
-                <Label htmlFor="complete-site">Site</Label>
+                <Label htmlFor="complete-site">{t('vaccinations.form.site')}</Label>
                 <Input
                   id="complete-site"
                   value={completeForm.administrationSite}
                   onChange={(e) => setCompleteForm((p) => ({ ...p, administrationSite: e.target.value }))}
-                  placeholder="e.g. Left thigh"
+                  placeholder={t('vaccinations.form.siteExample')}
                 />
               </div>
             </section>
@@ -674,11 +773,11 @@ export default function Vaccinations() {
             <Accordion type="single" collapsible>
               <AccordionItem value="vial" className="border-b-0">
                 <AccordionTrigger className="py-2 text-sm font-semibold text-muted-foreground hover:no-underline">
-                  Vaccine vial details (optional)
+                  {t('vaccinations.completeDialog.vialDetails')}
                 </AccordionTrigger>
                 <AccordionContent className="space-y-3 pt-2">
                   <div>
-                    <Label htmlFor="complete-company">Vaccine company</Label>
+                    <Label htmlFor="complete-company">{t('vaccinations.form.vaccineCompany')}</Label>
                     <Input
                       id="complete-company"
                       value={completeForm.vaccineManufacturer}
@@ -686,7 +785,7 @@ export default function Vaccinations() {
                     />
                   </div>
                   <div>
-                    <Label htmlFor="complete-batch">Batch number</Label>
+                    <Label htmlFor="complete-batch">{t('vaccinations.form.batchNumber')}</Label>
                     <Input
                       id="complete-batch"
                       value={completeForm.batchNumber}
@@ -694,7 +793,7 @@ export default function Vaccinations() {
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="complete-mfg">Manufacturing date</Label>
+                    <Label htmlFor="complete-mfg">{t('vaccinations.form.manufacturingDate')}</Label>
                     <DatePicker
                       id="complete-mfg"
                       value={completeForm.manufacturingDate}
@@ -705,7 +804,7 @@ export default function Vaccinations() {
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="complete-expiry">Expiry date</Label>
+                    <Label htmlFor="complete-expiry">{t('vaccinations.form.expiryDate')}</Label>
                     <DatePicker
                       id="complete-expiry"
                       value={completeForm.expiryDate}
@@ -728,10 +827,10 @@ export default function Vaccinations() {
                 setCompleteContext(null);
               }}
             >
-              Cancel
+              {t('common.cancel')}
             </Button>
             <Button type="button" onClick={submitComplete}>
-              <Check className="h-4 w-4 mr-1" /> Save
+              <Check className="h-4 w-4 mr-1" /> {t('common.save')}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -740,9 +839,9 @@ export default function Vaccinations() {
       {/* Photo Viewer Dialog */}
       <Dialog open={!!photoViewOpen} onOpenChange={() => setPhotoViewOpen(null)}>
         <DialogContent className="sm:max-w-lg">
-          <DialogHeader><DialogTitle className="font-display">Vaccine Card Photo</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle className="font-display">{t('vaccinations.photoViewer.title')}</DialogTitle></DialogHeader>
           {photoViewOpen && (
-            <img src={photoViewOpen} alt="Vaccine card" className="w-full rounded-lg" />
+            <img src={photoViewOpen} alt={t('vaccinations.photoViewer.alt')} className="w-full rounded-lg" />
           )}
         </DialogContent>
       </Dialog>

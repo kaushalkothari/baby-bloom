@@ -2,34 +2,33 @@ import type { Child } from '@/types';
 
 export type ChildAvatarOption = {
   id: string;
-  label: string;
   emoji: string;
 };
 
-/** Preset avatars for child profiles (stored as `avatarId` / DB `avatar_id`). */
+/** Preset avatars for child profiles (stored as `avatarId` / DB `avatar_id`). Labels: i18n `children.avatars.<id>`. */
 export const CHILD_AVATAR_OPTIONS: ChildAvatarOption[] = [
-  { id: 'baby', label: 'Baby', emoji: '👶' },
-  { id: 'bottle', label: 'Bottle', emoji: '🍼' },
-  { id: 'chick', label: 'Chick', emoji: '🐣' },
-  { id: 'panda', label: 'Panda', emoji: '🐼' },
-  { id: 'bear', label: 'Teddy bear', emoji: '🧸' },
-  { id: 'bunny', label: 'Bunny', emoji: '🐰' },
-  { id: 'koala', label: 'Koala', emoji: '🐨' },
-  { id: 'duck', label: 'Duck', emoji: '🐤' },
-  { id: 'penguin', label: 'Penguin', emoji: '🐧' },
-  { id: 'elephant', label: 'Elephant', emoji: '🐘' },
-  { id: 'kitten', label: 'Kitten', emoji: '🐱' },
-  { id: 'puppy', label: 'Puppy', emoji: '🐶' },
-  { id: 'butterfly', label: 'Butterfly', emoji: '🦋' },
-  { id: 'ladybug', label: 'Ladybug', emoji: '🐞' },
-  { id: 'flower', label: 'Flower', emoji: '🌸' },
-  { id: 'sunflower', label: 'Sunflower', emoji: '🌻' },
-  { id: 'balloon', label: 'Balloon', emoji: '🎈' },
-  { id: 'rainbow', label: 'Rainbow', emoji: '🌈' },
-  { id: 'moon', label: 'Moon', emoji: '🌙' },
-  { id: 'rocket', label: 'Rocket', emoji: '🚀' },
-  { id: 'star', label: 'Star', emoji: '⭐' },
-  { id: 'sun', label: 'Sun', emoji: '🌞' },
+  { id: 'baby', emoji: '👶' },
+  { id: 'bottle', emoji: '🍼' },
+  { id: 'chick', emoji: '🐣' },
+  { id: 'panda', emoji: '🐼' },
+  { id: 'bear', emoji: '🧸' },
+  { id: 'bunny', emoji: '🐰' },
+  { id: 'koala', emoji: '🐨' },
+  { id: 'duck', emoji: '🐤' },
+  { id: 'penguin', emoji: '🐧' },
+  { id: 'elephant', emoji: '🐘' },
+  { id: 'kitten', emoji: '🐱' },
+  { id: 'puppy', emoji: '🐶' },
+  { id: 'butterfly', emoji: '🦋' },
+  { id: 'ladybug', emoji: '🐞' },
+  { id: 'flower', emoji: '🌸' },
+  { id: 'sunflower', emoji: '🌻' },
+  { id: 'balloon', emoji: '🎈' },
+  { id: 'rainbow', emoji: '🌈' },
+  { id: 'moon', emoji: '🌙' },
+  { id: 'rocket', emoji: '🚀' },
+  { id: 'star', emoji: '⭐' },
+  { id: 'sun', emoji: '🌞' },
 ];
 
 export function getChildAvatar(avatarId: string | undefined): ChildAvatarOption | undefined {

@@ -8,12 +8,14 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { useToast } from '@/hooks/use-toast';
 import { APP_TITLE, APP_TAGLINE } from '@/lib/appMeta';
 import { useSupabaseAuth } from '@/lib/supabase/useSupabaseAuth';
+import { useTranslation } from 'react-i18next';
 
 const Auth = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const [searchParams] = useSearchParams();
   const from = (location.state as { from?: string } | null)?.from ?? '/';
+  const { t } = useTranslation();
   const {
     session,
     initialized,
@@ -47,24 +49,23 @@ const Auth = () => {
     e.preventDefault();
     if (!cloudAuthReady) {
       toast({
-        title: 'Cloud sign-in unavailable',
-        description:
-          'Supabase is not configured. Add VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY to .env and restart the dev server.',
+        title: t('auth.cloudSignInUnavailable'),
+        description: t('auth.supabaseNotConfigured'),
       });
       return;
     }
     if (!signInEmail || !signInPassword) {
-      toast({ title: 'Please fill in all fields', variant: 'destructive' });
+      toast({ title: t('auth.pleaseFillAllFields'), variant: 'destructive' });
       return;
     }
     setLoading(true);
     const { error } = await signInWithEmail(signInEmail, signInPassword);
     setLoading(false);
     if (error) {
-      toast({ title: 'Sign in failed', description: error.message, variant: 'destructive' });
+      toast({ title: t('auth.signInFailed'), description: error.message, variant: 'destructive' });
       return;
     }
-    toast({ title: 'Signed in successfully' });
+    toast({ title: t('auth.signedIn') });
     navigate(from, { replace: true });
   };
 
@@ -72,30 +73,29 @@ const Auth = () => {
     e.preventDefault();
     if (!cloudAuthReady) {
       toast({
-        title: 'Cloud sign-up unavailable',
-        description:
-          'Supabase is not configured. Add VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY to .env and restart the dev server.',
+        title: t('auth.cloudSignUpUnavailable'),
+        description: t('auth.supabaseNotConfigured'),
       });
       return;
     }
     if (!signUpName || !signUpEmail || !signUpPassword) {
-      toast({ title: 'Please fill in all fields', variant: 'destructive' });
+      toast({ title: t('auth.pleaseFillAllFields'), variant: 'destructive' });
       return;
     }
     if (signUpPassword.length < 6) {
-      toast({ title: 'Password must be at least 6 characters', variant: 'destructive' });
+      toast({ title: t('auth.passwordMin6'), variant: 'destructive' });
       return;
     }
     setLoading(true);
     const { error } = await signUpWithEmail(signUpEmail, signUpPassword, signUpName);
     setLoading(false);
     if (error) {
-      toast({ title: 'Sign up failed', description: error.message, variant: 'destructive' });
+      toast({ title: t('auth.signUpFailed'), description: error.message, variant: 'destructive' });
       return;
     }
     toast({
-      title: 'Account created',
-      description: 'If email confirmation is enabled, check your inbox. Otherwise, sign in now.',
+      title: t('auth.accountCreated'),
+      description: t('auth.accountCreatedDesc'),
     });
     setIsSignUp(false);
   };
@@ -103,22 +103,22 @@ const Auth = () => {
   const handleForgotPassword = async () => {
     if (!cloudAuthReady) {
       toast({
-        title: 'Password reset unavailable',
-        description: 'Supabase is not configured. Check .env and restart the dev server.',
+        title: t('auth.passwordResetUnavailable'),
+        description: t('auth.supabaseCheckEnv'),
         variant: 'destructive',
       });
       return;
     }
     if (!signInEmail) {
-      toast({ title: 'Enter your email above first', variant: 'destructive' });
+      toast({ title: t('auth.enterEmailFirst'), variant: 'destructive' });
       return;
     }
     const { error } = await resetPasswordForEmail(signInEmail);
     if (error) {
-      toast({ title: 'Reset failed', description: error.message, variant: 'destructive' });
+      toast({ title: t('auth.resetFailed'), description: error.message, variant: 'destructive' });
       return;
     }
-    toast({ title: 'Reset link sent', description: 'Check your email.' });
+    toast({ title: t('auth.resetLinkSent'), description: t('auth.checkYourEmail') });
   };
 
   const restoringSession = cloudAuthReady && !initialized;
@@ -148,19 +148,19 @@ const Auth = () => {
           <Card className="shadow-lg border-border/50">
             <CardContent className="flex flex-col items-center justify-center py-16 gap-3">
               <Loader2 className="h-6 w-6 animate-spin text-primary" />
-              <p className="text-sm text-muted-foreground">Checking your session…</p>
+              <p className="text-sm text-muted-foreground">{t('auth.checkingSession')}</p>
             </CardContent>
           </Card>
         ) : (
           <Card className="shadow-lg border-border/50">
             <CardHeader className="text-center pb-4">
               <CardTitle className="font-display text-xl">
-                {isSignUp ? 'Create an Account' : 'Welcome Back'}
+                {isSignUp ? t('pages.auth.createAccount') : t('pages.auth.welcomeBack')}
               </CardTitle>
               <CardDescription>
                 {isSignUp
-                  ? "Sign up to start tracking your child's health"
-                  : 'Sign in to access your health records'}
+                  ? t('pages.auth.signUpSubtitle')
+                  : t('pages.auth.signInSubtitle')}
               </CardDescription>
             </CardHeader>
 
@@ -168,12 +168,12 @@ const Auth = () => {
               {isSignUp ? (
                 <form onSubmit={handleSignUp} className="space-y-4">
                   <div className="space-y-2">
-                    <Label htmlFor="signup-name">First Name</Label>
+                    <Label htmlFor="signup-name">{t('pages.auth.firstName')}</Label>
                     <div className="relative">
                       <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                       <Input
                         id="signup-name"
-                        placeholder="Enter your first name"
+                        placeholder={t('pages.auth.firstName')}
                         className="pl-10"
                         value={signUpName}
                         onChange={e => setSignUpName(e.target.value)}
@@ -182,13 +182,13 @@ const Auth = () => {
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="signup-email">Email</Label>
+                    <Label htmlFor="signup-email">{t('pages.auth.email')}</Label>
                     <div className="relative">
                       <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                       <Input
                         id="signup-email"
                         type="email"
-                        placeholder="Enter your email"
+                        placeholder={t('pages.auth.email')}
                         className="pl-10"
                         value={signUpEmail}
                         onChange={e => setSignUpEmail(e.target.value)}
@@ -197,13 +197,13 @@ const Auth = () => {
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="signup-password">Password</Label>
+                    <Label htmlFor="signup-password">{t('pages.auth.password')}</Label>
                     <div className="relative">
                       <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                       <Input
                         id="signup-password"
                         type={showPassword ? 'text' : 'password'}
-                        placeholder="Create a password (min. 6 chars)"
+                        placeholder={t('pages.auth.password')}
                         className="pl-10 pr-10"
                         value={signUpPassword}
                         onChange={e => setSignUpPassword(e.target.value)}
@@ -222,11 +222,11 @@ const Auth = () => {
                     {loading ? (
                       <>
                         <Loader2 className="h-4 w-4 animate-spin" />
-                        Creating account…
+                        {t('auth.creatingAccount')}
                       </>
                     ) : (
                       <>
-                        Sign Up
+                        {t('pages.auth.signUp')}
                         <ArrowRight className="h-4 w-4" />
                       </>
                     )}
@@ -235,13 +235,13 @@ const Auth = () => {
               ) : (
                 <form onSubmit={handleSignIn} className="space-y-4">
                   <div className="space-y-2">
-                    <Label htmlFor="signin-email">Email</Label>
+                    <Label htmlFor="signin-email">{t('pages.auth.email')}</Label>
                     <div className="relative">
                       <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                       <Input
                         id="signin-email"
                         type="email"
-                        placeholder="Enter your email"
+                        placeholder={t('pages.auth.email')}
                         className="pl-10"
                         value={signInEmail}
                         onChange={e => setSignInEmail(e.target.value)}
@@ -251,13 +251,13 @@ const Auth = () => {
 
                   <div className="space-y-2">
                     <div className="flex items-center justify-between">
-                      <Label htmlFor="signin-password">Password</Label>
+                      <Label htmlFor="signin-password">{t('pages.auth.password')}</Label>
                       <button
                         type="button"
                         className="text-xs text-primary hover:underline"
                         onClick={handleForgotPassword}
                       >
-                        Forgot password?
+                        {t('auth.forgotPassword')}
                       </button>
                     </div>
                     <div className="relative">
@@ -265,7 +265,7 @@ const Auth = () => {
                       <Input
                         id="signin-password"
                         type={showPassword ? 'text' : 'password'}
-                        placeholder="Enter your password"
+                        placeholder={t('pages.auth.password')}
                         className="pl-10 pr-10"
                         value={signInPassword}
                         onChange={e => setSignInPassword(e.target.value)}
@@ -284,11 +284,11 @@ const Auth = () => {
                     {loading ? (
                       <>
                         <Loader2 className="h-4 w-4 animate-spin" />
-                        Signing in…
+                        {t('auth.signingIn')}
                       </>
                     ) : (
                       <>
-                        Log in
+                        {t('pages.auth.signIn')}
                         <ArrowRight className="h-4 w-4" />
                       </>
                     )}
@@ -299,24 +299,24 @@ const Auth = () => {
               <div className="mt-6 text-center text-sm text-muted-foreground">
                 {isSignUp ? (
                   <>
-                    Already have an account?{' '}
+                    {t('auth.alreadyHaveAccount')}{' '}
                     <button
                       type="button"
                       className="text-primary font-semibold hover:underline"
                       onClick={() => { setIsSignUp(false); setShowPassword(false); }}
                     >
-                      Log in
+                      {t('auth.logIn')}
                     </button>
                   </>
                 ) : (
                   <>
-                    Don&apos;t have an account?{' '}
+                    {t('auth.dontHaveAccount')}{' '}
                     <button
                       type="button"
                       className="text-primary font-semibold hover:underline"
                       onClick={() => { setIsSignUp(true); setShowPassword(false); }}
                     >
-                      Sign Up
+                      {t('pages.auth.signUp')}
                     </button>
                   </>
                 )}
@@ -326,7 +326,7 @@ const Auth = () => {
         )}
 
         <p className="text-center text-xs text-muted-foreground mt-6">
-          By continuing, you agree to our Terms of Service and Privacy Policy
+          {t('auth.byContinuing')}
         </p>
       </div>
     </div>

@@ -6,12 +6,14 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid } from 'recharts';
 import { format } from 'date-fns';
 import { TrendingUp } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useTranslation } from 'react-i18next';
 
 type GrowthChartKey = 'weight' | 'height' | 'head';
 
 export default function Growth() {
   const { selectedChild, visits } = useApp();
   const [focusedChart, setFocusedChart] = useState<GrowthChartKey | null>(null);
+  const { t } = useTranslation();
 
   const chartCardClass = (key: GrowthChartKey, extra?: string) =>
     cn(
@@ -20,7 +22,7 @@ export default function Growth() {
       focusedChart === key && 'relative z-10 scale-[1.01] shadow-lg ring-2 ring-primary ring-offset-2 ring-offset-background',
     );
 
-  if (!selectedChild) return <p className="text-muted-foreground text-center py-20">Please select or add a child first.</p>;
+  if (!selectedChild) return <p className="text-muted-foreground text-center py-20">{t('empty.selectChildFirst')}</p>;
 
   const growthData = visits
     .filter(
@@ -38,19 +40,19 @@ export default function Growth() {
     }));
 
   const chartConfig = {
-    weight: { label: 'Weight (kg)', color: 'hsl(var(--primary))' },
-    height: { label: 'Height (cm)', color: 'hsl(var(--info))' },
-    headCircumference: { label: 'Head Circ. (cm)', color: 'hsl(var(--success))' },
+    weight: { label: t('growth.labels.weightKg'), color: 'hsl(var(--primary))' },
+    height: { label: t('growth.labels.heightCm'), color: 'hsl(var(--info))' },
+    headCircumference: { label: t('growth.labels.headCm'), color: 'hsl(var(--success))' },
   };
 
   if (growthData.length === 0) {
     return (
       <div className="space-y-6">
-        <h1 className="text-3xl font-display font-bold">Growth Charts</h1>
+        <h1 className="text-3xl font-display font-bold">{t('pages.growth.title')}</h1>
         <div className="text-center py-20">
           <TrendingUp className="h-16 w-16 text-muted-foreground/40 mx-auto mb-4" />
           <p className="text-muted-foreground">
-            No growth data yet. Add weight, height, or head circumference during hospital visits.
+            {t('growth.noGrowthData')}
           </p>
         </div>
       </div>
@@ -59,7 +61,7 @@ export default function Growth() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-3xl font-display font-bold">Growth Charts — {selectedChild.name}</h1>
+      <h1 className="text-3xl font-display font-bold">{t('pages.growth.title')} — {selectedChild.name}</h1>
 
       <div className="relative grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Upper half: weight (full width, same prominence as former head-circumference row) */}
@@ -68,7 +70,7 @@ export default function Growth() {
           onClick={() => setFocusedChart((c) => (c === 'weight' ? null : 'weight'))}
         >
           <CardHeader>
-            <CardTitle className="font-display">Weight Over Time</CardTitle>
+            <CardTitle className="font-display">{t('growth.weightOverTime')}</CardTitle>
           </CardHeader>
           <CardContent>
             <ChartContainer
@@ -99,7 +101,7 @@ export default function Growth() {
           onClick={() => setFocusedChart((c) => (c === 'height' ? null : 'height'))}
         >
           <CardHeader>
-            <CardTitle className="font-display">Height Over Time</CardTitle>
+            <CardTitle className="font-display">{t('growth.heightOverTime')}</CardTitle>
           </CardHeader>
           <CardContent>
             <ChartContainer
@@ -129,7 +131,7 @@ export default function Growth() {
           onClick={() => setFocusedChart((c) => (c === 'head' ? null : 'head'))}
         >
           <CardHeader>
-            <CardTitle className="font-display">Head Circumference Over Time</CardTitle>
+            <CardTitle className="font-display">{t('growth.headOverTime')}</CardTitle>
           </CardHeader>
           <CardContent>
             <ChartContainer

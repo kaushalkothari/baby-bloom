@@ -3,6 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Camera, Upload, Loader2, ScanText, Image as ImageIcon } from 'lucide-react';
 import { toast } from 'sonner';
+import { useTranslation } from 'react-i18next';
 
 interface OcrResult {
   vaccineName?: string;
@@ -20,6 +21,7 @@ interface VaccineCardCaptureProps {
 }
 
 export function VaccineCardCapture({ open, onOpenChange, onPhotoCapture, onOcrResult }: VaccineCardCaptureProps) {
+  const { t } = useTranslation();
   const [preview, setPreview] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -27,11 +29,11 @@ export function VaccineCardCapture({ open, onOpenChange, onPhotoCapture, onOcrRe
 
   const handleFile = (file: File) => {
     if (!file.type.startsWith('image/')) {
-      toast.error('Please select an image file.');
+      toast.error(t('vaccineCardCapture.errorNotImage'));
       return;
     }
     if (file.size > 10 * 1024 * 1024) {
-      toast.error('Image must be under 10MB.');
+      toast.error(t('vaccineCardCapture.errorSize'));
       return;
     }
     const reader = new FileReader();
@@ -61,15 +63,15 @@ export function VaccineCardCapture({ open, onOpenChange, onPhotoCapture, onOcrRe
       onOcrResult(result);
 
       if (result.vaccineName || result.batchNumber || result.completedDate) {
-        toast.success('Fields extracted from vaccine card!');
+        toast.success(t('vaccineCardCapture.successExtracted'));
       } else {
-        toast.info('Could not extract fields automatically. Photo saved — you can fill in manually.');
+        toast.info(t('vaccineCardCapture.infoNoExtract'));
       }
       onOpenChange(false);
       setPreview(null);
     } catch (err) {
       console.error('OCR error:', err);
-      toast.error('OCR processing failed. Photo saved without extraction.');
+      toast.error(t('vaccineCardCapture.ocrFailed'));
       onPhotoCapture(preview);
       onOpenChange(false);
       setPreview(null);
@@ -81,7 +83,7 @@ export function VaccineCardCapture({ open, onOpenChange, onPhotoCapture, onOcrRe
   const saveWithoutOcr = () => {
     if (preview) {
       onPhotoCapture(preview);
-      toast.success('Vaccine card photo saved!');
+      toast.success(t('vaccineCardCapture.photoSaved'));
     }
     onOpenChange(false);
     setPreview(null);
@@ -97,14 +99,14 @@ export function VaccineCardCapture({ open, onOpenChange, onPhotoCapture, onOcrRe
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle className="font-display flex items-center gap-2">
-            <Camera className="h-5 w-5 text-primary" /> Capture Vaccine Card
+            <Camera className="h-5 w-5 text-primary" /> {t('vaccineCardCapture.title')}
           </DialogTitle>
         </DialogHeader>
 
         {!preview ? (
           <div className="space-y-4">
             <p className="text-sm text-muted-foreground">
-              Take a photo or upload an image of the vaccine card. We'll try to extract details automatically.
+              {t('vaccineCardCapture.intro')}
             </p>
             <div className="grid grid-cols-2 gap-3">
               <Button
@@ -113,7 +115,7 @@ export function VaccineCardCapture({ open, onOpenChange, onPhotoCapture, onOcrRe
                 onClick={() => cameraInputRef.current?.click()}
               >
                 <Camera className="h-6 w-6 text-primary" />
-                <span className="text-xs">Take Photo</span>
+                <span className="text-xs">{t('vaccineCardCapture.takePhoto')}</span>
               </Button>
               <Button
                 variant="outline"
@@ -121,7 +123,7 @@ export function VaccineCardCapture({ open, onOpenChange, onPhotoCapture, onOcrRe
                 onClick={() => fileInputRef.current?.click()}
               >
                 <Upload className="h-6 w-6 text-primary" />
-                <span className="text-xs">Upload Image</span>
+                <span className="text-xs">{t('vaccineCardCapture.uploadImage')}</span>
               </Button>
             </div>
             <input
@@ -143,7 +145,7 @@ export function VaccineCardCapture({ open, onOpenChange, onPhotoCapture, onOcrRe
         ) : (
           <div className="space-y-4">
             <div className="relative rounded-lg overflow-hidden border border-border">
-              <img src={preview} alt="Vaccine card preview" className="w-full max-h-64 object-contain bg-muted" />
+              <img src={preview} alt={t('vaccineCardCapture.previewAlt')} className="w-full max-h-64 object-contain bg-muted" />
             </div>
             <div className="flex gap-2">
               <Button
@@ -152,9 +154,9 @@ export function VaccineCardCapture({ open, onOpenChange, onPhotoCapture, onOcrRe
                 className="flex-1 gap-2"
               >
                 {isProcessing ? (
-                  <><Loader2 className="h-4 w-4 animate-spin" /> Processing...</>
+                  <><Loader2 className="h-4 w-4 animate-spin" /> {t('vaccineCardCapture.processing')}</>
                 ) : (
-                  <><ScanText className="h-4 w-4" /> Scan &amp; Extract</>
+                  <><ScanText className="h-4 w-4" /> {t('vaccineCardCapture.scanExtract')}</>
                 )}
               </Button>
               <Button
@@ -163,11 +165,11 @@ export function VaccineCardCapture({ open, onOpenChange, onPhotoCapture, onOcrRe
                 disabled={isProcessing}
                 className="gap-2"
               >
-                <ImageIcon className="h-4 w-4" /> Save Only
+                <ImageIcon className="h-4 w-4" /> {t('vaccineCardCapture.saveOnly')}
               </Button>
             </div>
             <Button variant="ghost" size="sm" onClick={reset} disabled={isProcessing} className="w-full">
-              Retake / Choose Another
+              {t('vaccineCardCapture.retake')}
             </Button>
           </div>
         )}

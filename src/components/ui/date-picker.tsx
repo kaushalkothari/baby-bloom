@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { useDialogPortalContainer } from '@/components/ui/dialog';
 import { cn } from '@/lib/utils';
+import { useTranslation } from 'react-i18next';
 
 function parseStoredDate(value: string): Date | undefined {
   if (!value?.trim()) return undefined;
@@ -35,7 +36,7 @@ export function DatePicker({
   id,
   value,
   onChange,
-  placeholder = 'Pick a date',
+  placeholder,
   className,
   disabled,
   fromYear,
@@ -44,6 +45,7 @@ export function DatePicker({
   captionLayout = 'dropdown',
   allowClear,
 }: DatePickerProps) {
+  const { t } = useTranslation();
   const [open, setOpen] = React.useState(false);
   const dialogPortalContainer = useDialogPortalContainer();
   const selected = parseStoredDate(value);
@@ -66,7 +68,7 @@ export function DatePicker({
           )}
         >
           <CalendarIcon className="mr-2 h-4 w-4 shrink-0 opacity-70" />
-          {selected ? format(selected, 'PPP') : placeholder}
+          {selected ? format(selected, 'PPP') : (placeholder ?? t('ui.pickADate'))}
         </Button>
       </PopoverTrigger>
       <PopoverContent
@@ -99,7 +101,7 @@ export function DatePicker({
                 setOpen(false);
               }}
             >
-              Clear date
+              {t('common.clearDates')}
             </Button>
           </div>
         ) : null}

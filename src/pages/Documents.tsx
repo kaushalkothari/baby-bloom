@@ -31,6 +31,7 @@ import { Document as DocType } from '@/types';
 import { toast } from 'sonner';
 import { useFilePickerDialogGuard } from '@/hooks/useFilePickerDialogGuard';
 import { normalizeImageDataUrl, isHeic } from '@/lib/imageUtils';
+import { useTranslation } from 'react-i18next';
 import {
   buildLinkedDocumentRows,
   imageMimeFromSrc,
@@ -50,15 +51,6 @@ import {
 } from '@/lib/security/uploads';
 import { useHighlightScroll } from '@/hooks/useHighlightParam';
 import { cn } from '@/lib/utils';
-
-const docTypes = [
-  { value: 'receipt', label: 'Receipt' },
-  { value: 'lab_report', label: 'Lab Report' },
-  { value: 'discharge_summary', label: 'Discharge Summary' },
-  { value: 'prescription', label: 'Prescription' },
-  { value: 'vaccination_card', label: 'Vaccination Card' },
-  { value: 'other', label: 'Other' },
-];
 
 function documentRowIcon(row: LinkedDocumentRow): LucideIcon {
   if (row.kind === 'prescription') return Pill;
@@ -114,6 +106,31 @@ export default function Documents() {
   const [pickedFile, setPickedFile] = useState<PickedFile | null>(null);
   const { pickingFile, beforePick, afterPick } = useFilePickerDialogGuard();
   const [focusedDocKey, setFocusedDocKey] = useState<string | null>(null);
+  const { t } = useTranslation();
+
+  const docTypes = useMemo(
+    () =>
+      (
+        [
+          'receipt',
+          'lab_report',
+          'discharge_summary',
+          'prescription',
+          'vaccination_card',
+          'other',
+        ] as const
+      ).map((value) => ({ value, label: t(`documents.types.${value}`) })),
+    [t],
+  );
+
+  const linkedRowKinds = useMemo(
+    () => ({
+      prescription: t('documents.rowKinds.prescription'),
+      vaccinationCard: t('documents.rowKinds.vaccinationCard'),
+      billingReceipt: t('documents.rowKinds.billingReceipt'),
+    }),
+    [t],
+  );
 
   const mergedRows = useMemo(
     () =>
@@ -185,7 +202,7 @@ export default function Documents() {
     }
   }, [mergedRows, focusedDocKey]);
 
-  if (!selectedChild) return <p className="text-muted-foreground text-center py-20">Please select or add a child first.</p>;
+  if (!selectedChild) return <p className="text-muted-foreground text-center py-20">{t('empty.selectChildFirst')}</p>;
 
   const resetDialog = () => {
     setForm({ type: 'other', date: new Date().toISOString().split('T')[0] });
@@ -244,7 +261,7 @@ export default function Documents() {
           setPickedFile({ data, type: mime, name: file.name });
         }
       } catch (err) {
-        toast.error(err instanceof Error ? err.message : 'Could not process this image.');
+        toast.error(err instanceof Error ? err.message : t('common.imageProcessFailed'));
       }
       input.value = '';
     };
@@ -252,7 +269,7 @@ export default function Documents() {
   };
 
   const handleSave = () => {
-    if (!form.name || !pickedFile) { toast.error('Name and file are required.'); return; }
+    if (!form.name || !pickedFile) { toast.error(t('documents.requiredError')); return; }
     const urlErr = validateClientDataUrl(pickedFile.data, maxBytes, { allowPdf: true });
     if (urlErr) {
       toast.error(urlErr);
@@ -266,7 +283,7 @@ export default function Documents() {
       fileType: pickedFile.type,
       createdAt: new Date().toISOString(),
     } as DocType);
-    toast.success('Document uploaded!');
+    toast.success(t('documents.uploaded'));
     setOpen(false);
     resetDialog();
   };
@@ -288,24 +305,24 @@ export default function Documents() {
     if (row.kind === 'upload') {
       deleteDocument(row.doc.id);
       clearFocus();
-      toast.success('Deleted.');
+      toast.success(t('documents.deleted'));
       return;
     }
     if (row.kind === 'prescription') {
       updatePrescription({ ...row.rx, prescriptionImage: '' });
       clearFocus();
-      toast.success('Prescription image removed.');
+      toast.success(t('documents.prescriptionImageRemoved'));
       return;
     }
     if (row.kind === 'vaccination') {
       updateVaccination({ ...row.vax, cardPhoto: undefined });
       clearFocus();
-      toast.success('Vaccination card image removed.');
+      toast.success(t('documents.vaccinationCardRemoved'));
       return;
     }
     updateBilling({ ...row.bill, receiptImage: '' });
     clearFocus();
-    toast.success('Billing receipt image removed.');
+    toast.success(t('documents.billingReceiptRemoved'));
   };
 
   const blockCloseWhilePicking = (e: Event) => {
@@ -315,7 +332,7 @@ export default function Documents() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-3">
-        <h1 className="text-3xl font-display font-bold">Documents</h1>
+        <h1 className="text-3xl font-display font-bold">{t('pages.documents.title')}</h1>
         <Dialog
           open={open}
           onOpenChange={o => {
@@ -325,24 +342,24 @@ export default function Documents() {
           }}
         >
           <DialogTrigger asChild>
-            <Button className="gap-2"><Plus className="h-4 w-4" /> Upload</Button>
+            <Button className="gap-2"><Plus className="h-4 w-4" /> {t('common.upload')}</Button>
           </DialogTrigger>
           <DialogContent
             onFocusOutside={blockCloseWhilePicking}
             onPointerDownOutside={blockCloseWhilePicking}
           >
-            <DialogHeader><DialogTitle className="font-display">Upload Document</DialogTitle></DialogHeader>
+            <DialogHeader><DialogTitle className="font-display">{t('pages.documents.uploadDialogTitle')}</DialogTitle></DialogHeader>
             <div className="space-y-4">
-              <div><Label>Name *</Label><Input value={form.name || ''} onChange={e => setForm(p => ({ ...p, name: e.target.value }))} /></div>
+              <div><Label>{t('documents.nameRequired')}</Label><Input value={form.name || ''} onChange={e => setForm(p => ({ ...p, name: e.target.value }))} /></div>
               <div>
-                <Label>Type</Label>
+                <Label>{t('documents.type')}</Label>
                 <Select value={form.type || 'other'} onValueChange={v => setForm(p => ({ ...p, type: v as DocType['type'] }))}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>{docTypes.map(t => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}</SelectContent>
                 </Select>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="doc-date">Date</Label>
+                <Label htmlFor="doc-date">{t('documents.dateLabel')}</Label>
                 <DatePicker
                   id="doc-date"
                   value={form.date || ''}
@@ -353,7 +370,7 @@ export default function Documents() {
 
               {/* File input + inline preview */}
               <div className="space-y-2">
-                <Label>File *</Label>
+                <Label>{t('documents.fileRequired')}</Label>
                 <input
                   ref={fileRef}
                   type="file"
@@ -375,7 +392,7 @@ export default function Documents() {
                         <FileText className="h-10 w-10 shrink-0 text-primary" aria-hidden />
                         <div className="min-w-0 text-left">
                           <p className="text-sm font-medium truncate">{pickedFile.name}</p>
-                          <p className="text-xs text-muted-foreground">PDF ready to upload</p>
+                          <p className="text-xs text-muted-foreground">{t('documents.pdfReady')}</p>
                         </div>
                       </div>
                     ) : (
@@ -386,7 +403,7 @@ export default function Documents() {
                     )}
                     <div className="border-t border-border px-3 py-2 flex gap-2 justify-end">
                       <Button type="button" variant="outline" size="sm" className="gap-1" onClick={triggerFilePick}>
-                        <Image className="h-4 w-4" /> Replace
+                        <Image className="h-4 w-4" /> {t('common.replace')}
                       </Button>
                       <Button
                         type="button"
@@ -397,19 +414,19 @@ export default function Documents() {
                           if (fileRef.current) fileRef.current.value = '';
                         }}
                       >
-                        Remove
+                        {t('common.remove')}
                       </Button>
                     </div>
                   </div>
                 ) : (
                   <Button type="button" variant="outline" className="w-full gap-2" onClick={triggerFilePick}>
-                    <Image className="h-4 w-4" /> Choose File
+                    <Image className="h-4 w-4" /> {t('common.chooseFile')}
                   </Button>
                 )}
               </div>
 
-              <div><Label>Notes</Label><Textarea value={form.notes || ''} onChange={e => setForm(p => ({ ...p, notes: e.target.value }))} /></div>
-              <Button onClick={handleSave} className="w-full">Upload</Button>
+              <div><Label>{t('documents.notes')}</Label><Textarea value={form.notes || ''} onChange={e => setForm(p => ({ ...p, notes: e.target.value }))} /></div>
+              <Button onClick={handleSave} className="w-full">{t('common.upload')}</Button>
             </div>
           </DialogContent>
         </Dialog>
@@ -419,7 +436,7 @@ export default function Documents() {
         <Card className="border-border/60 shadow-sm">
           <CardContent className="pt-4 space-y-4">
             <div className="flex items-center gap-2">
-              <span className="text-sm text-muted-foreground shrink-0">Filter:</span>
+              <span className="text-sm text-muted-foreground shrink-0">{t('documents.filterLabel')}</span>
               <div className="flex-1 overflow-x-auto [-webkit-overflow-scrolling:touch]">
                 <div className="flex items-center gap-2 min-w-max pr-1">
                   <Button
@@ -427,7 +444,7 @@ export default function Documents() {
                     size="sm"
                     onClick={() => setFilterType('all')}
                   >
-                    All
+                    {t('documents.allTypes')}
                   </Button>
                   {docTypes.map((t) => (
                     <Button
@@ -459,20 +476,20 @@ export default function Documents() {
                     return (
                       <>
                         <Button type="button" variant="outline" size="sm" onClick={() => setRange(today, today)}>
-                          Today
+                          {t('common.today')}
                         </Button>
                         <Button type="button" variant="outline" size="sm" onClick={() => setRange(subDays(today, 6), today)}>
-                          Last 7 days
+                          {t('common.last7Days')}
                         </Button>
                         <Button type="button" variant="outline" size="sm" onClick={() => setRange(subDays(today, 29), today)}>
-                          Last 30 days
+                          {t('common.last30Days')}
                         </Button>
                         <Button type="button" variant="outline" size="sm" onClick={() => setRange(startOfMonth(today), endOfMonth(today))}>
-                          This month
+                          {t('common.thisMonth')}
                         </Button>
                         {(dateFrom || dateTo) && (
                           <Button type="button" variant="ghost" size="sm" onClick={() => { setDateFrom(''); setDateTo(''); }}>
-                            Clear dates
+                            {t('common.clearDates')}
                           </Button>
                         )}
                       </>
@@ -482,7 +499,7 @@ export default function Documents() {
               </div>
 
               <div className="w-full sm:w-auto sm:min-w-[220px]">
-                <Label htmlFor="doc-date-from" className="text-xs text-muted-foreground">From</Label>
+                <Label htmlFor="doc-date-from" className="text-xs text-muted-foreground">{t('common.from')}</Label>
                 <DatePicker
                   id="doc-date-from"
                   value={dateFrom}
@@ -498,7 +515,7 @@ export default function Documents() {
                 />
               </div>
               <div className="w-full sm:w-auto sm:min-w-[220px]">
-                <Label htmlFor="doc-date-to" className="text-xs text-muted-foreground">To</Label>
+                <Label htmlFor="doc-date-to" className="text-xs text-muted-foreground">{t('common.to')}</Label>
                 <DatePicker
                   id="doc-date-to"
                   value={dateTo}
@@ -521,7 +538,7 @@ export default function Documents() {
       {mergedRows.length === 0 ? (
         <div className="text-center py-20">
           <FileText className="h-16 w-16 text-muted-foreground/40 mx-auto mb-4" />
-          <p className="text-muted-foreground">No documents uploaded yet.</p>
+          <p className="text-muted-foreground">{t('documents.empty')}</p>
         </div>
       ) : (
         <div className="relative grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -556,7 +573,7 @@ export default function Documents() {
                     </span>
                   </div>
                   <div className="flex items-center gap-2">
-                    <Badge variant="secondary">{rowTypeLabel(row, docTypes)}</Badge>
+                    <Badge variant="secondary">{rowTypeLabel(row, docTypes, linkedRowKinds)}</Badge>
                   </div>
                 </CardHeader>
                 <CardContent className="pt-0">
@@ -579,14 +596,14 @@ export default function Documents() {
                             variant="outline"
                             size="icon"
                             className="h-9 w-9"
-                            aria-label={row.kind === 'prescription' ? 'View image' : 'View'}
+                            aria-label={row.kind === 'prescription' ? t('common.viewImage') : t('common.view')}
                             onClick={() => setPreview({ name: title, fileData })}
                           >
                             <Eye className="h-4 w-4" />
                           </Button>
                         </TooltipTrigger>
                         <TooltipContent>
-                          {row.kind === 'prescription' ? 'View image' : 'View'}
+                          {row.kind === 'prescription' ? t('common.viewImage') : t('common.view')}
                         </TooltipContent>
                       </Tooltip>
                     )}
@@ -597,13 +614,13 @@ export default function Documents() {
                           variant="outline"
                           size="icon"
                           className="h-9 w-9"
-                          aria-label="Download"
+                          aria-label={t('common.download')}
                           onClick={() => downloadFile(title, fileData)}
                         >
                           <Download className="h-4 w-4" />
                         </Button>
                       </TooltipTrigger>
-                      <TooltipContent>Download</TooltipContent>
+                      <TooltipContent>{t('common.download')}</TooltipContent>
                     </Tooltip>
 
                     <Tooltip>
@@ -612,13 +629,13 @@ export default function Documents() {
                           variant="ghost"
                           size="icon"
                           className="h-9 w-9"
-                          aria-label="Delete"
+                          aria-label={t('common.delete')}
                           onClick={() => handleDeleteRow(row)}
                         >
                           <Trash2 className="h-4 w-4 text-destructive" />
                         </Button>
                       </TooltipTrigger>
-                      <TooltipContent>Delete</TooltipContent>
+                      <TooltipContent>{t('common.delete')}</TooltipContent>
                     </Tooltip>
                   </div>
                 </CardContent>

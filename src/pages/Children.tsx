@@ -27,6 +27,7 @@ import {
   suggestedAvatarIdForGender,
 } from '@/lib/childAvatars';
 import { cn } from '@/lib/utils';
+import { useTranslation } from 'react-i18next';
 
 const STANDARD_BLOOD_GROUPS = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'] as const;
 
@@ -52,12 +53,9 @@ const emptyChild = (): Partial<Child> => ({
 const todayStart = () => startOfDay(new Date());
 const minDobStart = () => startOfDay(subYears(new Date(), 30));
 
-function formatGender(g: Child['gender']) {
-  return g.charAt(0).toUpperCase() + g.slice(1);
-}
-
 export default function Children() {
   const { children, addChild, updateChild, deleteChild, setSelectedChildId } = useApp();
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Child | null>(null);
   const [form, setForm] = useState<Partial<Child>>(emptyChild());
@@ -73,7 +71,7 @@ export default function Children() {
 
   const handleSave = async () => {
     if (!form.name || !form.dateOfBirth || !form.gender) {
-      toast.error('Name, date of birth, and gender are required.');
+      toast.error(t('children.requiredError'));
       return;
     }
     const avatarId =
@@ -81,7 +79,7 @@ export default function Children() {
     const payload = { ...form, avatarId } as Partial<Child>;
     if (editing) {
       updateChild({ ...editing, ...payload } as Child);
-      toast.success('Child updated!');
+      toast.success(t('children.updated'));
     } else {
       const child: Child = {
         ...payload,
@@ -91,7 +89,7 @@ export default function Children() {
       const ok = await addChild(child);
       if (!ok) return;
       setSelectedChildId(child.id);
-      toast.success('Child added!');
+      toast.success(t('children.added'));
     }
     setOpen(false);
     setEditing(null);
@@ -106,17 +104,17 @@ export default function Children() {
   };
 
   const handleDelete = (child: Child) => {
-    if (confirm(`Delete ${child.name} and all associated records?`)) {
+    if (confirm(t('children.deleteConfirm', { name: child.name }))) {
       deleteChild(child.id);
       setFocusedChildId((id) => (id === child.id ? null : id));
-      toast.success('Deleted.');
+      toast.success(t('children.deleted'));
     }
   };
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-display font-bold">Children</h1>
+        <h1 className="text-3xl font-display font-bold">{t('pages.children.title')}</h1>
         <Dialog
           open={open}
           onOpenChange={(o) => {
@@ -129,30 +127,32 @@ export default function Children() {
           }}
         >
           <DialogTrigger asChild>
-            <Button className="gap-2"><Plus className="h-4 w-4" /> Add Child</Button>
+            <Button className="gap-2"><Plus className="h-4 w-4" /> {t('children.addChild')}</Button>
           </DialogTrigger>
           <DialogContent className="max-w-md">
             <DialogHeader>
-              <DialogTitle className="font-display">{editing ? 'Edit Child' : 'Add Child'}</DialogTitle>
+              <DialogTitle className="font-display">
+                {editing ? t('children.editChild') : t('children.addChild')}
+              </DialogTitle>
             </DialogHeader>
             <div className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="child-name">Name *</Label>
+                <Label htmlFor="child-name">{t('children.form.nameRequired')}</Label>
                 <Input
                   id="child-name"
                   autoComplete="name"
-                  placeholder="Child's name"
+                  placeholder={t('children.form.namePlaceholder')}
                   value={form.name || ''}
                   onChange={e => setForm(p => ({ ...p, name: e.target.value }))}
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="child-dob-trigger">Date of Birth *</Label>
+                <Label htmlFor="child-dob-trigger">{t('children.form.dobRequired')}</Label>
                 <DatePicker
                   id="child-dob-trigger"
                   value={form.dateOfBirth || ''}
                   onChange={(v) => setForm((p) => ({ ...p, dateOfBirth: v }))}
-                  placeholder="Pick date of birth"
+                  placeholder={t('children.form.dobPlaceholder')}
                   disabled={(d) =>
                     isAfter(startOfDay(d), todayStart()) || isBefore(startOfDay(d), minDobStart())
                   }
@@ -165,7 +165,7 @@ export default function Children() {
                 </p> */}
               </div>
               <div className="space-y-2">
-                <Label htmlFor="child-gender">Gender *</Label>
+                <Label htmlFor="child-gender">{t('children.form.genderRequired')}</Label>
                 <Select
                   value={form.gender}
                   onValueChange={(v) => {
@@ -178,33 +178,34 @@ export default function Children() {
                   }}
                 >
                   <SelectTrigger id="child-gender">
-                    <SelectValue placeholder="Choose one" />
+                    <SelectValue placeholder={t('children.form.genderPlaceholder')} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="female">Female</SelectItem>
-                    <SelectItem value="male">Male</SelectItem>
-                    <SelectItem value="other">Other</SelectItem>
+                    <SelectItem value="female">{t('children.gender.female')}</SelectItem>
+                    <SelectItem value="male">{t('children.gender.male')}</SelectItem>
+                    <SelectItem value="other">{t('children.gender.other')}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
               <div className="space-y-2">
-                <Label>Avatar</Label>
+                <Label>{t('children.form.avatar')}</Label>
                 <p className="text-xs text-muted-foreground">
-                  Suggested default updates with gender when adding a child; tap an icon to choose.
+                  {t('children.form.avatarHint')}
                 </p>
                 <div
                   className="flex flex-wrap gap-1.5"
                   role="group"
-                  aria-label="Choose child avatar"
+                  aria-label={t('children.form.avatarAria')}
                 >
                   {CHILD_AVATAR_OPTIONS.map((opt) => {
                     const selected =
                       (form.avatarId ?? suggestedAvatarIdForGender(form.gender)) === opt.id;
+                    const avatarName = t(`children.avatars.${opt.id}`);
                     return (
                       <button
                         key={opt.id}
                         type="button"
-                        title={opt.label}
+                        title={avatarName}
                         aria-pressed={selected}
                         onClick={() => setForm((p) => ({ ...p, avatarId: opt.id }))}
                         className={`flex h-9 w-9 items-center justify-center rounded-full border text-lg transition-colors ${
@@ -214,14 +215,14 @@ export default function Children() {
                         }`}
                       >
                         <span aria-hidden>{opt.emoji}</span>
-                        <span className="sr-only">{opt.label}</span>
+                        <span className="sr-only">{avatarName}</span>
                       </button>
                     );
                   })}
                 </div>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="child-blood">Blood group</Label>
+                <Label htmlFor="child-blood">{t('children.form.bloodGroup')}</Label>
                 <Select
                   value={bloodGroupDropdown}
                   onValueChange={(v) => {
@@ -237,7 +238,7 @@ export default function Children() {
                   }}
                 >
                   <SelectTrigger id="child-blood">
-                    <SelectValue placeholder="Choose blood group" />
+                    <SelectValue placeholder={t('children.form.bloodPlaceholder')} />
                   </SelectTrigger>
                   <SelectContent>
                     {STANDARD_BLOOD_GROUPS.map((g) => (
@@ -245,7 +246,7 @@ export default function Children() {
                         {g}
                       </SelectItem>
                     ))}
-                    <SelectItem value="other">Other</SelectItem>
+                    <SelectItem value="other">{t('children.gender.other')}</SelectItem>
                   </SelectContent>
                 </Select>
                 {bloodGroupDropdown === 'other' && (
@@ -254,13 +255,13 @@ export default function Children() {
                     className="mt-2"
                     value={form.bloodGroup || ''}
                     onChange={(e) => setForm((p) => ({ ...p, bloodGroup: e.target.value }))}
-                    placeholder="Enter blood group"
-                    aria-label="Blood group (other)"
+                    placeholder={t('children.form.bloodOtherPlaceholder')}
+                    aria-label={t('children.form.bloodOtherAria')}
                   />
                 )}
               </div>
               <div className="space-y-2">
-                <Label htmlFor="child-notes">Notes</Label>
+                <Label htmlFor="child-notes">{t('children.form.notes')}</Label>
                 <Textarea
                   id="child-notes"
                   value={form.notes || ''}
@@ -268,7 +269,7 @@ export default function Children() {
                 />
               </div>
               <Button type="button" onClick={() => void handleSave()} className="w-full">
-                {editing ? 'Update' : 'Add Child'}
+                {editing ? t('common.update') : t('children.addChild')}
               </Button>
             </div>
           </DialogContent>
@@ -278,14 +279,17 @@ export default function Children() {
       {children.length === 0 ? (
         <div className="text-center py-20">
           <Baby className="h-16 w-16 text-muted-foreground/40 mx-auto mb-4" />
-          <p className="text-muted-foreground">No children added yet. Click "Add Child" to get started.</p>
+          <p className="text-muted-foreground">{t('children.empty')}</p>
         </div>
       ) : (
         <div className="relative grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {children.map(child => {
             const ageMonths = differenceInMonths(new Date(), new Date(child.dateOfBirth));
             const ageDays = differenceInDays(new Date(), new Date(child.dateOfBirth));
-            const ageText = ageMonths >= 1 ? `${ageMonths} month${ageMonths > 1 ? 's' : ''}` : `${ageDays} day${ageDays > 1 ? 's' : ''}`;
+            const ageText =
+              ageMonths >= 1
+                ? t('children.age.months', { count: ageMonths })
+                : t('children.age.days', { count: ageDays });
             const avatar = getChildAvatar(child.avatarId);
             const isFocused = focusedChildId === child.id;
             return (
@@ -310,22 +314,39 @@ export default function Children() {
                     </div>
                     <div>
                       <CardTitle className="font-display">{child.name}</CardTitle>
-                      <p className="text-sm text-muted-foreground">{ageText} old</p>
+                      <p className="text-sm text-muted-foreground">
+                        {ageText} {t('children.ageSuffix')}
+                      </p>
                     </div>
                   </div>
                   <div className="flex gap-1" onClick={e => e.stopPropagation()}>
-                    <Button variant="ghost" size="icon" onClick={() => openEdit(child)}><Pencil className="h-4 w-4" /></Button>
-                    <Button variant="ghost" size="icon" onClick={() => handleDelete(child)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
+                    <Button variant="ghost" size="icon" onClick={() => openEdit(child)} aria-label={t('common.edit')}>
+                      <Pencil className="h-4 w-4" />
+                    </Button>
+                    <Button variant="ghost" size="icon" onClick={() => handleDelete(child)} aria-label={t('common.delete')}>
+                      <Trash2 className="h-4 w-4 text-destructive" />
+                    </Button>
                   </div>
                 </CardHeader>
                 <CardContent>
                   <div className="text-sm space-y-1">
-                    <p><span className="text-muted-foreground">DOB:</span> {format(new Date(child.dateOfBirth), 'PP')}</p>
-                    <p><span className="text-muted-foreground">Gender:</span> {formatGender(child.gender)}</p>
-                    {child.bloodGroup && <p><span className="text-muted-foreground">Blood Group:</span> {child.bloodGroup}</p>}
+                    <p>
+                      <span className="text-muted-foreground">{t('children.card.dob')}</span>{' '}
+                      {format(new Date(child.dateOfBirth), 'PP')}
+                    </p>
+                    <p>
+                      <span className="text-muted-foreground">{t('children.card.gender')}</span>{' '}
+                      {t(`children.gender.${child.gender}`)}
+                    </p>
+                    {child.bloodGroup && (
+                      <p>
+                        <span className="text-muted-foreground">{t('children.card.bloodGroup')}</span>{' '}
+                        {child.bloodGroup}
+                      </p>
+                    )}
                     {child.notes?.trim() && (
                       <p className="pt-1 text-muted-foreground">
-                        <span className="font-medium text-foreground/80">Notes: </span>
+                        <span className="font-medium text-foreground/80">{t('children.card.notesLabel')} </span>
                         <span className="block mt-0.5 whitespace-pre-wrap break-words line-clamp-4">{child.notes.trim()}</span>
                       </p>
                     )}
