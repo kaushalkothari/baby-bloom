@@ -277,9 +277,8 @@ export default function Billing() {
 
   const patchForm = (key: string, val: unknown) => setForm(p => ({ ...p, [key]: val }));
 
-  const triggerFilePick = () => {
+  const beforeTriggerFilePick = () => {
     beforePick();
-    fileRef.current?.click();
   };
 
   const handleReceiptUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -392,16 +391,19 @@ export default function Billing() {
                   ref={fileRef}
                   type="file"
                   accept="image/*,.heic,.heif"
-                  className="hidden"
+                  id="bill-receipt-input"
+                  className="sr-only"
                   onChange={handleReceiptUpload}
                 />
                 <Button
                   type="button"
                   variant={form.receiptImage ? 'secondary' : 'outline'}
                   className="w-full gap-2"
-                  onClick={triggerFilePick}
+                  asChild
                 >
-                  <Image className="h-4 w-4" /> {form.receiptImage ? t('billing.form.replaceReceiptPhoto') : t('billing.form.uploadReceiptPhoto')}
+                  <label htmlFor="bill-receipt-input" onClick={beforeTriggerFilePick} className="cursor-pointer">
+                    <Image className="h-4 w-4" /> {form.receiptImage ? t('billing.form.replaceReceiptPhoto') : t('billing.form.uploadReceiptPhoto')}
+                  </label>
                 </Button>
                 {form.receiptImage && (
                   <div className="flex items-center justify-between gap-2 rounded-md border bg-muted/20 px-3 py-2">

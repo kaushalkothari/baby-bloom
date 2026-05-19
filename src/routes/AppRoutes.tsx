@@ -15,6 +15,7 @@ import Vaccinations from "@/pages/Vaccinations";
 import Prescriptions from "@/pages/Prescriptions";
 import Documents from "@/pages/Documents";
 import Billing from "@/pages/Billing";
+import AuditLog from "@/pages/AuditLog";
 import Auth from "@/pages/Auth";
 import NotFound from "@/pages/NotFound";
 import { ProtectedRoute } from "@/lib/supabase/ProtectedRoute";
@@ -32,6 +33,7 @@ export function AppRoutes() {
           <Route path="/prescriptions" element={<Prescriptions />} />
           <Route path="/billing" element={<Billing />} />
           <Route path="/documents" element={<Documents />} />
+          <Route path="/audit-log" element={<AuditLog />} />
         </Route>
       </Route>
       <Route path="/login" element={<Auth />} />

@@ -23,6 +23,7 @@ const resources = {
         prescriptions: 'Prescriptions',
         billing: 'Billing',
         documents: 'Documents',
+        auditLog: 'Audit Log',
       },
       common: {
         add: 'Add',
@@ -617,6 +618,7 @@ const resources = {
         prescriptions: 'प्रिस्क्रिप्शन',
         billing: 'बिलिंग',
         documents: 'दस्तावेज़',
+        auditLog: 'ऑडिट लॉग',
       },
       common: {
         add: 'जोड़ें',
@@ -1210,6 +1212,7 @@ const resources = {
         prescriptions: 'प्रिस्क्रिप्शन',
         billing: 'बिलिंग',
         documents: 'दस्तऐवज',
+        auditLog: 'ऑडिट लॉग',
       },
       common: {
         add: 'जोडा',

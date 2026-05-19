@@ -378,9 +378,8 @@ export default function Prescriptions() {
     setForm(p => ({ ...p, medicines: p.medicines.filter((_, i) => i !== idx) }));
   };
 
-  const triggerFilePick = () => {
+  const beforeTriggerFilePick = () => {
     beforePick();
-    fileRef.current?.click();
   };
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -470,7 +469,8 @@ export default function Prescriptions() {
                   ref={fileRef}
                   type="file"
                   accept="image/*,.heic,.heif"
-                  className="hidden"
+                  id="rx-image-input"
+                  className="sr-only"
                   onChange={handleImageUpload}
                 />
 
@@ -482,8 +482,10 @@ export default function Prescriptions() {
                       className="max-h-52 w-full object-contain bg-background"
                     />
                     <div className="border-t border-border px-3 py-2 flex gap-2 justify-end">
-                      <Button type="button" variant="outline" size="sm" className="gap-1" onClick={triggerFilePick}>
-                        <Image className="h-4 w-4" /> {t('common.replace')}
+                      <Button type="button" variant="outline" size="sm" className="gap-1" asChild>
+                        <label htmlFor="rx-image-input" onClick={beforeTriggerFilePick} className="cursor-pointer">
+                          <Image className="h-4 w-4" /> {t('common.replace')}
+                        </label>
                       </Button>
                       <Button type="button" variant="destructive" size="sm" onClick={() => patchForm('prescriptionImage', '')}>
                         {t('common.remove')}
@@ -491,8 +493,10 @@ export default function Prescriptions() {
                     </div>
                   </div>
                 ) : (
-                  <Button type="button" variant="outline" className="w-full gap-2" onClick={triggerFilePick}>
-                    <Image className="h-4 w-4" /> {t('prescriptions.uploadImage')}
+                  <Button type="button" variant="outline" className="w-full gap-2" asChild>
+                    <label htmlFor="rx-image-input" onClick={beforeTriggerFilePick} className="cursor-pointer">
+                      <Image className="h-4 w-4" /> {t('prescriptions.uploadImage')}
+                    </label>
                   </Button>
                 )}
               </div>

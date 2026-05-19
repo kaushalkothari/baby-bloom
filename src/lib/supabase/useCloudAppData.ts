@@ -13,6 +13,7 @@ import * as db from './data-access';
 import { ThinApiClient } from '@/lib/api/client';
 import { isThinApiEnabled } from '@/lib/api/flags';
 import { MAX_DOCUMENT_BYTES_REMOTE, validateClientDataUrl } from '@/lib/security/uploads';
+import { writeAuditLog } from '@/lib/audit/auditLogger';
 
 function selectedChildStorageKey(userId: string) {
   return `babybloom-selected-child-${userId}`;
@@ -174,37 +175,23 @@ export function useCloudAppData(
     try {
       const ch = useThinApi ? await api.listChildren() : await db.fetchChildrenForUser(client, userId);
       setChildren(ch);
+      const ids = ch.map((c) => c.id);
       const [v, vx, rx, doc, bill] = await Promise.all([
         useThinApi
           ? api.listVisits()
-          : db.fetchVisitsForChildren(
-              client,
-              ch.map((c) => c.id),
-            ),
+          : db.fetchVisitsForChildren(client, ids, userId),
         useThinApi
           ? api.listVaccinations()
-          : db.fetchVaccinationsForChildren(
-              client,
-              ch.map((c) => c.id),
-            ),
+          : db.fetchVaccinationsForChildren(client, ids, userId),
         useThinApi
           ? api.listPrescriptions()
-          : db.fetchPrescriptionsForChildren(
-              client,
-              ch.map((c) => c.id),
-            ),
+          : db.fetchPrescriptionsForChildren(client, ids, userId),
         useThinApi
           ? api.listDocuments()
-          : db.fetchDocumentsForChildren(
-              client,
-              ch.map((c) => c.id),
-            ),
+          : db.fetchDocumentsForChildren(client, ids, userId),
         useThinApi
           ? api.listBilling()
-          : db.fetchBillingForChildren(
-              client,
-              ch.map((c) => c.id),
-            ),
+          : db.fetchBillingForChildren(client, ids, userId),
       ]);
       setVisits(v);
       setVaccinations(vx);
@@ -240,6 +227,14 @@ export function useCloudAppData(
       if (!active || !userId || !client) return false;
       try {
         const row = useThinApi ? await api.createChild(child) : await db.insertChild(client, userId, child);
+        if (useThinApi) {
+          void writeAuditLog(client, userId, {
+            action: 'create',
+            entityType: 'child',
+            entityId: row.id,
+            metadata: { name: row.name, gender: row.gender },
+          });
+        }
         setChildren((p) => [...p, row]);
         setSelectedChildId(row.id);
         return true;
@@ -255,7 +250,15 @@ export function useCloudAppData(
     (child: Child) => {
       if (!active || !userId || !client) return;
       runAsync('Could not update child', async () => {
-        const row = useThinApi ? await api.updateChild(child) : await db.updateChildRow(client, child);
+        const row = useThinApi ? await api.updateChild(child) : await db.updateChildRow(client, child, userId);
+        if (useThinApi) {
+          void writeAuditLog(client, userId, {
+            action: 'update',
+            entityType: 'child',
+            entityId: child.id,
+            metadata: { name: row.name },
+          });
+        }
         setChildren((p) => p.map((c) => (c.id === row.id ? row : c)));
       });
     },
@@ -266,8 +269,12 @@ export function useCloudAppData(
     (id: string) => {
       if (!active || !client) return;
       runAsync('Could not delete child', async () => {
-        if (useThinApi) await api.deleteChild(id);
-        else await db.deleteChildRow(client, id);
+        if (useThinApi) {
+          await api.deleteChild(id);
+          if (userId) {
+            void writeAuditLog(client, userId, { action: 'delete', entityType: 'child', entityId: id });
+          }
+        } else await db.deleteChildRow(client, id, userId ?? undefined);
         setChildren((p) => p.filter((c) => c.id !== id));
         setVisits((p) => p.filter((v) => v.childId !== id));
         setVaccinations((p) => p.filter((v) => v.childId !== id));
@@ -277,117 +284,191 @@ export function useCloudAppData(
         setSelectedChildIdState((cur) => (cur === id ? null : cur));
       });
     },
-    [active, client, runAsync, useThinApi, api],
+    [active, client, runAsync, useThinApi, api, userId],
   );
 
   const addVisit = useCallback(
     (visit: HospitalVisit) => {
       if (!active || !client) return;
       return runAsyncAwait('Could not save visit', async () => {
-        const row = useThinApi ? await api.upsertVisit(visit) : await db.upsertVisit(client, visit);
+        const isNew = !visits.some((v) => v.id === visit.id);
+        const row = useThinApi ? await api.upsertVisit(visit) : await db.upsertVisit(client, visit, userId ?? undefined);
+        if (useThinApi && userId) {
+          void writeAuditLog(client, userId, {
+            action: isNew ? 'create' : 'update',
+            entityType: 'hospital_visit',
+            entityId: row.id,
+            metadata: { hospitalName: row.hospitalName, reason: row.reason, childId: row.childId },
+          });
+        }
         setVisits((p) => [...p.filter((x) => x.id !== row.id), row]);
       });
     },
-    [active, client, runAsyncAwait, useThinApi, api],
+    [active, client, runAsyncAwait, useThinApi, api, userId, visits],
   );
 
   const updateVisit = useCallback(
     (visit: HospitalVisit) => {
       if (!active || !client) return;
       return runAsyncAwait('Could not update visit', async () => {
-        const row = useThinApi ? await api.upsertVisit(visit) : await db.upsertVisit(client, visit);
+        const isNew = !visits.some((v) => v.id === visit.id);
+        const row = useThinApi ? await api.upsertVisit(visit) : await db.upsertVisit(client, visit, userId ?? undefined);
+        if (useThinApi && userId) {
+          void writeAuditLog(client, userId, {
+            action: isNew ? 'create' : 'update',
+            entityType: 'hospital_visit',
+            entityId: row.id,
+            metadata: { hospitalName: row.hospitalName, reason: row.reason, childId: row.childId },
+          });
+        }
         setVisits((p) => p.map((v) => (v.id === row.id ? row : v)));
       });
     },
-    [active, client, runAsyncAwait, useThinApi, api],
+    [active, client, runAsyncAwait, useThinApi, api, userId, visits],
   );
 
   const deleteVisit = useCallback(
     (id: string) => {
       if (!active || !client) return;
       runAsync('Could not delete visit', async () => {
-        if (useThinApi) await api.deleteVisit(id);
-        else await db.deleteVisitRow(client, id);
+        if (useThinApi) {
+          await api.deleteVisit(id);
+          if (userId) {
+            void writeAuditLog(client, userId, { action: 'delete', entityType: 'hospital_visit', entityId: id });
+          }
+        } else await db.deleteVisitRow(client, id, userId ?? undefined);
         setVisits((p) => p.filter((v) => v.id !== id));
       });
     },
-    [active, client, runAsync, useThinApi, api],
+    [active, client, runAsync, useThinApi, api, userId],
   );
 
   const addVaccination = useCallback(
     (vax: Vaccination) => {
       if (!active || !userId || !client) return;
       runAsync('Could not save vaccination', async () => {
+        const isNew = !vaccinations.some((v) => v.id === vax.id);
         const row = useThinApi
           ? await api.upsertVaccination(vax)
           : await db.upsertVaccination(client, userId, vax);
+        if (useThinApi) {
+          void writeAuditLog(client, userId, {
+            action: isNew ? 'create' : 'update',
+            entityType: 'vaccination',
+            entityId: row.id,
+            metadata: { vaccineName: row.vaccineName, childId: row.childId },
+          });
+        }
         setVaccinations((p) => [...p.filter((x) => x.id !== row.id), row]);
       });
     },
-    [active, userId, client, runAsync, useThinApi, api],
+    [active, userId, client, runAsync, useThinApi, api, vaccinations],
   );
 
   const updateVaccination = useCallback(
     (vax: Vaccination) => {
       if (!active || !userId || !client) return;
       runAsync('Could not update vaccination', async () => {
+        const isNew = !vaccinations.some((v) => v.id === vax.id);
         const row = useThinApi
           ? await api.upsertVaccination(vax)
           : await db.upsertVaccination(client, userId, vax);
+        if (useThinApi) {
+          void writeAuditLog(client, userId, {
+            action: isNew ? 'create' : 'update',
+            entityType: 'vaccination',
+            entityId: row.id,
+            metadata: { vaccineName: row.vaccineName, childId: row.childId },
+          });
+        }
         setVaccinations((p) => p.map((v) => (v.id === row.id ? row : v)));
       });
     },
-    [active, userId, client, runAsync, useThinApi, api],
+    [active, userId, client, runAsync, useThinApi, api, vaccinations],
   );
 
   const deleteVaccination = useCallback(
     (id: string) => {
       if (!active || !client) return;
       runAsync('Could not delete vaccination', async () => {
-        if (useThinApi) await api.deleteVaccination(id);
-        else await db.deleteVaccinationRow(client, id);
+        if (useThinApi) {
+          await api.deleteVaccination(id);
+          if (userId) {
+            void writeAuditLog(client, userId, { action: 'delete', entityType: 'vaccination', entityId: id });
+          }
+        } else await db.deleteVaccinationRow(client, id, userId ?? undefined);
         setVaccinations((p) => p.filter((v) => v.id !== id));
       });
     },
-    [active, client, runAsync, useThinApi, api],
+    [active, client, runAsync, useThinApi, api, userId],
   );
 
   const addPrescription = useCallback(
     (rx: Prescription) => {
       if (!active || !userId || !client) return;
       runAsync('Could not save prescription', async () => {
+        const isNew = !prescriptions.some((p) => p.id === rx.id);
         const row = useThinApi
           ? await api.upsertPrescription(rx)
           : await db.upsertPrescription(client, userId, rx);
+        if (useThinApi) {
+          void writeAuditLog(client, userId, {
+            action: isNew ? 'create' : 'update',
+            entityType: 'prescription',
+            entityId: row.id,
+            metadata: {
+              prescribingDoctor: row.prescribingDoctor,
+              childId: row.childId,
+              medicineCount: row.medicines?.length ?? 0,
+            },
+          });
+        }
         setPrescriptions((p) => [...p.filter((x) => x.id !== row.id), row]);
       });
     },
-    [active, userId, client, runAsync, useThinApi, api],
+    [active, userId, client, runAsync, useThinApi, api, prescriptions],
   );
 
   const updatePrescription = useCallback(
     (rx: Prescription) => {
       if (!active || !userId || !client) return;
       runAsync('Could not update prescription', async () => {
+        const isNew = !prescriptions.some((p) => p.id === rx.id);
         const row = useThinApi
           ? await api.upsertPrescription(rx)
           : await db.upsertPrescription(client, userId, rx);
+        if (useThinApi) {
+          void writeAuditLog(client, userId, {
+            action: isNew ? 'create' : 'update',
+            entityType: 'prescription',
+            entityId: row.id,
+            metadata: {
+              prescribingDoctor: row.prescribingDoctor,
+              childId: row.childId,
+              medicineCount: row.medicines?.length ?? 0,
+            },
+          });
+        }
         setPrescriptions((p) => p.map((x) => (x.id === row.id ? row : x)));
       });
     },
-    [active, userId, client, runAsync, useThinApi, api],
+    [active, userId, client, runAsync, useThinApi, api, prescriptions],
   );
 
   const deletePrescription = useCallback(
     (id: string) => {
       if (!active || !client) return;
       runAsync('Could not delete prescription', async () => {
-        if (useThinApi) await api.deletePrescription(id);
-        else await db.deletePrescriptionRow(client, id);
+        if (useThinApi) {
+          await api.deletePrescription(id);
+          if (userId) {
+            void writeAuditLog(client, userId, { action: 'delete', entityType: 'prescription', entityId: id });
+          }
+        } else await db.deletePrescriptionRow(client, id, userId ?? undefined);
         setPrescriptions((p) => p.filter((x) => x.id !== id));
       });
     },
-    [active, client, runAsync, useThinApi, api],
+    [active, client, runAsync, useThinApi, api, userId],
   );
 
   const addDocument = useCallback(
@@ -406,6 +487,14 @@ export function useCloudAppData(
         const row = useThinApi
           ? await api.createDocument({ document: doc, dataUrl: doc.fileData, fileType: doc.fileType })
           : await db.insertDocument(client, userId, doc, doc.fileData, doc.fileType);
+        if (useThinApi) {
+          void writeAuditLog(client, userId, {
+            action: 'create',
+            entityType: 'document',
+            entityId: row.id,
+            metadata: { name: row.name, documentType: row.type, childId: row.childId },
+          });
+        }
         setDocuments((p) => [...p, row]);
       });
     },
@@ -416,46 +505,72 @@ export function useCloudAppData(
     (id: string) => {
       if (!active || !client) return;
       runAsync('Could not delete document', async () => {
-        if (useThinApi) await api.deleteDocument(id);
-        else await db.deleteDocumentRow(client, id);
+        if (useThinApi) {
+          await api.deleteDocument(id);
+          if (userId) {
+            void writeAuditLog(client, userId, { action: 'delete', entityType: 'document', entityId: id });
+          }
+        } else await db.deleteDocumentRow(client, id, userId ?? undefined);
         setDocuments((p) => p.filter((d) => d.id !== id));
       });
     },
-    [active, client, runAsync, useThinApi, api],
+    [active, client, runAsync, useThinApi, api, userId],
   );
 
   const addBilling = useCallback(
     (bill: BillingRecord) => {
       if (!active || !userId || !client) return;
       runAsync('Could not save bill', async () => {
+        const isNew = !billing.some((b) => b.id === bill.id);
         const row = useThinApi ? await api.upsertBilling(bill) : await db.upsertBilling(client, userId, bill);
+        if (useThinApi) {
+          void writeAuditLog(client, userId, {
+            action: isNew ? 'create' : 'update',
+            entityType: 'billing_record',
+            entityId: row.id,
+            metadata: { hospitalName: row.hospitalName, amount: row.amount, childId: row.childId },
+          });
+        }
         setBilling((p) => [...p.filter((x) => x.id !== row.id), row]);
       });
     },
-    [active, userId, client, runAsync, useThinApi, api],
+    [active, userId, client, runAsync, useThinApi, api, billing],
   );
 
   const updateBilling = useCallback(
     (bill: BillingRecord) => {
       if (!active || !userId || !client) return;
       runAsync('Could not update bill', async () => {
+        const isNew = !billing.some((b) => b.id === bill.id);
         const row = useThinApi ? await api.upsertBilling(bill) : await db.upsertBilling(client, userId, bill);
+        if (useThinApi) {
+          void writeAuditLog(client, userId, {
+            action: isNew ? 'create' : 'update',
+            entityType: 'billing_record',
+            entityId: row.id,
+            metadata: { hospitalName: row.hospitalName, amount: row.amount, childId: row.childId },
+          });
+        }
         setBilling((p) => p.map((b) => (b.id === row.id ? row : b)));
       });
     },
-    [active, userId, client, runAsync, useThinApi, api],
+    [active, userId, client, runAsync, useThinApi, api, billing],
   );
 
   const deleteBilling = useCallback(
     (id: string) => {
       if (!active || !client) return;
       runAsync('Could not delete bill', async () => {
-        if (useThinApi) await api.deleteBilling(id);
-        else await db.deleteBillingRow(client, id);
+        if (useThinApi) {
+          await api.deleteBilling(id);
+          if (userId) {
+            void writeAuditLog(client, userId, { action: 'delete', entityType: 'billing_record', entityId: id });
+          }
+        } else await db.deleteBillingRow(client, id, userId ?? undefined);
         setBilling((p) => p.filter((b) => b.id !== id));
       });
     },
-    [active, client, runAsync, useThinApi, api],
+    [active, client, runAsync, useThinApi, api, userId],
   );
 
   const exportData = useCallback(() => {
@@ -467,7 +582,20 @@ export function useCloudAppData(
     a.download = `babybloom-cloud-backup-${new Date().toISOString().split('T')[0]}.json`;
     a.click();
     URL.revokeObjectURL(url);
-  }, [children, visits, vaccinations, prescriptions, documents, billing]);
+    if (client && userId) {
+      void writeAuditLog(client, userId, {
+        action: 'export_data',
+        metadata: {
+          childrenCount: children.length,
+          visitsCount: visits.length,
+          vaccinationsCount: vaccinations.length,
+          prescriptionsCount: prescriptions.length,
+          documentsCount: documents.length,
+          billingCount: billing.length,
+        },
+      });
+    }
+  }, [children, visits, vaccinations, prescriptions, documents, billing, client, userId]);
 
   const importData = useCallback((_json: string) => {
     toast.message('JSON import is only available in local (offline) mode.');

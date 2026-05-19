@@ -378,9 +378,56 @@ export interface Database {
         };
         Relationships: [];
       };
+      audit_logs: {
+        Row: {
+          id: string;
+          user_id: string;
+          action: string;
+          entity_type: string | null;
+          entity_id: string | null;
+          metadata: Record<string, unknown> | null;
+          ip_address: string | null;
+          user_agent: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          action: string;
+          entity_type?: string | null;
+          entity_id?: string | null;
+          metadata?: Record<string, unknown> | null;
+          ip_address?: string | null;
+          user_agent?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          action?: string;
+          entity_type?: string | null;
+          entity_id?: string | null;
+          metadata?: Record<string, unknown> | null;
+          ip_address?: string | null;
+          user_agent?: string | null;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
     };
     Views: Record<string, never>;
-    Functions: Record<string, never>;
+    Functions: {
+      log_audit_event: {
+        Args: {
+          p_action: string;
+          p_entity_type?: string | null;
+          p_entity_id?: string | null;
+          p_metadata?: Json;
+          p_user_agent?: string | null;
+        };
+        Returns: undefined;
+      };
+    };
     Enums: Record<string, never>;
   };
 }

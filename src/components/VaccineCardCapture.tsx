@@ -123,36 +123,34 @@ export function VaccineCardCapture({ open, onOpenChange, onPhotoCapture, onOcrRe
               {t('vaccineCardCapture.intro')}
             </p>
             <div className="grid grid-cols-2 gap-3">
-              <Button
-                variant="outline"
-                className="h-24 flex-col gap-2"
-                onClick={() => cameraInputRef.current?.click()}
-              >
-                <Camera className="h-6 w-6 text-primary" />
-                <span className="text-xs">{t('vaccineCardCapture.takePhoto')}</span>
+              <Button variant="outline" className="h-24 flex-col gap-2" asChild>
+                <label htmlFor="vax-camera-input" className="cursor-pointer">
+                  <Camera className="h-6 w-6 text-primary" />
+                  <span className="text-xs">{t('vaccineCardCapture.takePhoto')}</span>
+                </label>
               </Button>
-              <Button
-                variant="outline"
-                className="h-24 flex-col gap-2"
-                onClick={() => fileInputRef.current?.click()}
-              >
-                <Upload className="h-6 w-6 text-primary" />
-                <span className="text-xs">{t('vaccineCardCapture.uploadImage')}</span>
+              <Button variant="outline" className="h-24 flex-col gap-2" asChild>
+                <label htmlFor="vax-file-input" className="cursor-pointer">
+                  <Upload className="h-6 w-6 text-primary" />
+                  <span className="text-xs">{t('vaccineCardCapture.uploadImage')}</span>
+                </label>
               </Button>
             </div>
             <input
               ref={cameraInputRef}
+              id="vax-camera-input"
               type="file"
               accept="image/*"
               capture="environment"
-              className="hidden"
+              className="sr-only"
               onChange={handleInputChange}
             />
             <input
               ref={fileInputRef}
+              id="vax-file-input"
               type="file"
               accept="image/*"
-              className="hidden"
+              className="sr-only"
               onChange={handleInputChange}
             />
           </div>

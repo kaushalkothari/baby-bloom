@@ -250,9 +250,8 @@ export default function Documents() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedChild, fromVisit]);
 
-  const triggerFilePick = () => {
+  const beforeTriggerFilePick = () => {
     beforePick();
-    fileRef.current?.click();
   };
 
   const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -429,7 +428,8 @@ export default function Documents() {
                   ref={fileRef}
                   type="file"
                   accept="image/*,.heic,.heif,.pdf"
-                  className="hidden"
+                  id="doc-file-input"
+                  className="sr-only"
                   onChange={handleFile}
                 />
 
@@ -456,8 +456,10 @@ export default function Documents() {
                       </div>
                     )}
                     <div className="border-t border-border px-3 py-2 flex gap-2 justify-end">
-                      <Button type="button" variant="outline" size="sm" className="gap-1" onClick={triggerFilePick}>
-                        <Image className="h-4 w-4" /> {t('common.replace')}
+                      <Button type="button" variant="outline" size="sm" className="gap-1" asChild>
+                        <label htmlFor="doc-file-input" onClick={beforeTriggerFilePick} className="cursor-pointer">
+                          <Image className="h-4 w-4" /> {t('common.replace')}
+                        </label>
                       </Button>
                       <Button
                         type="button"
@@ -473,8 +475,10 @@ export default function Documents() {
                     </div>
                   </div>
                 ) : (
-                  <Button type="button" variant="outline" className="w-full gap-2" onClick={triggerFilePick}>
-                    <Image className="h-4 w-4" /> {t('common.chooseFile')}
+                  <Button type="button" variant="outline" className="w-full gap-2" asChild>
+                    <label htmlFor="doc-file-input" onClick={beforeTriggerFilePick} className="cursor-pointer">
+                      <Image className="h-4 w-4" /> {t('common.chooseFile')}
+                    </label>
                   </Button>
                 )}
               </div>

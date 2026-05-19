@@ -8,6 +8,7 @@
 import { useCallback } from 'react';
 import { useLocalStorage } from '@/hooks/useLocalStorage';
 import { Child, HospitalVisit, Vaccination, Prescription, Document, BillingRecord } from '@/types';
+import { encryptLocalValue, decryptLocalValue } from '@/lib/security/localEncryption';
 
 /** Offline / no Supabase — persists to localStorage. */
 export function useLocalAppData() {
@@ -64,18 +65,23 @@ export function useLocalAppData() {
 
   const exportData = () => {
     const data = { children, visits, vaccinations, prescriptions, documents, billing };
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const plainJson = JSON.stringify(data, null, 2);
+    const payload = encryptLocalValue(plainJson);
+    const blob = new Blob([payload], { type: 'application/octet-stream' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `baby-tracker-backup-${new Date().toISOString().split('T')[0]}.json`;
+    a.download = `baby-tracker-backup-${new Date().toISOString().split('T')[0]}.enc.json`;
     a.click();
     URL.revokeObjectURL(url);
   };
 
   const importData = (jsonStr: string) => {
     try {
-      const data = JSON.parse(jsonStr);
+      let raw = jsonStr;
+      const decrypted = decryptLocalValue(jsonStr);
+      if (decrypted) raw = decrypted;
+      const data = JSON.parse(raw);
       if (data.children) setChildren(data.children);
       if (data.visits) setVisits(data.visits);
       if (data.vaccinations) setVaccinations(data.vaccinations);

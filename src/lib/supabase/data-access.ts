@@ -19,6 +19,16 @@ import {
   mapBillRow,
 } from './mappers';
 import { getSignedUrl, uploadDataUrl, mimeFromDataUrl, extForMime } from './storage';
+import {
+  encryptChildRow,
+  encryptVisitRow,
+  encryptVaccinationRow,
+  encryptPrescriptionRow,
+  encryptPrescriptionMedicineRow,
+  encryptDocumentRow,
+  encryptBillingRow,
+} from '@/lib/security/fieldEncryption';
+import { writeAuditLog } from '@/lib/audit/auditLogger';
 
 type Client = SupabaseClient<Database>;
 type PrescriptionMedicineRow = Database['public']['Tables']['prescription_medicines']['Row'];
@@ -61,10 +71,10 @@ export async function fetchChildrenForUser(client: Client, userId: string): Prom
     .eq('user_id', userId)
     .order('created_at', { ascending: true });
   if (error) throw error;
-  return (data ?? []).map(mapChildRow);
+  return (data ?? []).map((r) => mapChildRow(r, userId));
 }
 
-export async function fetchVisitsForChildren(client: Client, childIds: string[]): Promise<HospitalVisit[]> {
+export async function fetchVisitsForChildren(client: Client, childIds: string[], userId?: string): Promise<HospitalVisit[]> {
   if (childIds.length === 0) return [];
   const { data, error } = await client
     .from('hospital_visits')
@@ -72,10 +82,10 @@ export async function fetchVisitsForChildren(client: Client, childIds: string[])
     .in('child_id', childIds)
     .order('visit_date', { ascending: false });
   if (error) throw error;
-  return (data ?? []).map(mapVisitRow);
+  return (data ?? []).map((r) => mapVisitRow(r, userId));
 }
 
-export async function fetchVaccinationsForChildren(client: Client, childIds: string[]): Promise<Vaccination[]> {
+export async function fetchVaccinationsForChildren(client: Client, childIds: string[], userId?: string): Promise<Vaccination[]> {
   if (childIds.length === 0) return [];
   const { data, error } = await client
     .from('vaccinations')
@@ -86,14 +96,14 @@ export async function fetchVaccinationsForChildren(client: Client, childIds: str
   const rows = data ?? [];
   return Promise.all(
     rows.map(async (r) => {
-      if (!r.card_photo_storage_path) return mapVaxRow(r);
+      if (!r.card_photo_storage_path) return mapVaxRow(r, undefined, userId);
       const url = await getSignedUrl(client, r.card_photo_storage_path);
-      return mapVaxRow(r, url);
+      return mapVaxRow(r, url, userId);
     }),
   );
 }
 
-export async function fetchPrescriptionsForChildren(client: Client, childIds: string[]): Promise<Prescription[]> {
+export async function fetchPrescriptionsForChildren(client: Client, childIds: string[], userId?: string): Promise<Prescription[]> {
   if (childIds.length === 0) return [];
   const { data, error } = await client
     .from('prescriptions')
@@ -106,17 +116,17 @@ export async function fetchPrescriptionsForChildren(client: Client, childIds: st
     rows.map(async (r) => {
       const meds = embeddedPrescriptionMedicines(r.prescription_medicines)
         .sort((a, b) => a.sort_order - b.sort_order)
-        .map(mapRxMedRow);
+        .map((m) => mapRxMedRow(m, userId));
       const img = r.prescription_image_storage_path
         ? await getSignedUrl(client, r.prescription_image_storage_path)
         : undefined;
       const { prescription_medicines: _, ...row } = r;
-      return mapRxRow(row as Database['public']['Tables']['prescriptions']['Row'], meds, img);
+      return mapRxRow(row as Database['public']['Tables']['prescriptions']['Row'], meds, img, userId);
     }),
   );
 }
 
-export async function fetchDocumentsForChildren(client: Client, childIds: string[]): Promise<Document[]> {
+export async function fetchDocumentsForChildren(client: Client, childIds: string[], userId?: string): Promise<Document[]> {
   if (childIds.length === 0) return [];
   const { data, error } = await client
     .from('documents')
@@ -128,12 +138,12 @@ export async function fetchDocumentsForChildren(client: Client, childIds: string
   return Promise.all(
     rows.map(async (r) => {
       const url = await getSignedUrl(client, r.storage_path);
-      return mapDocRow(r, url);
+      return mapDocRow(r, url, userId);
     }),
   );
 }
 
-export async function fetchBillingForChildren(client: Client, childIds: string[]): Promise<BillingRecord[]> {
+export async function fetchBillingForChildren(client: Client, childIds: string[], userId?: string): Promise<BillingRecord[]> {
   if (childIds.length === 0) return [];
   const { data, error } = await client
     .from('billing_records')
@@ -144,9 +154,9 @@ export async function fetchBillingForChildren(client: Client, childIds: string[]
   const rows = data ?? [];
   return Promise.all(
     rows.map(async (r) => {
-      if (!r.receipt_image_storage_path) return mapBillRow(r);
+      if (!r.receipt_image_storage_path) return mapBillRow(r, undefined, userId);
       const url = await getSignedUrl(client, r.receipt_image_storage_path);
-      return mapBillRow(r, url);
+      return mapBillRow(r, url, userId);
     }),
   );
 }
@@ -157,7 +167,7 @@ export async function insertChild(
   child: Omit<Child, 'createdAt'> & { createdAt?: string },
 ): Promise<Child> {
   const photoUrl = httpPhotoUrlForDb(child.photo);
-  const row = {
+  const row = encryptChildRow({
     id: child.id,
     user_id: userId,
     name: child.name,
@@ -168,39 +178,71 @@ export async function insertChild(
     photo_url: photoUrl,
     notes: child.notes ?? null,
     created_at: child.createdAt ?? new Date().toISOString(),
-  };
+  }, userId);
   const { data, error } = await client.from('children').insert(row).select('*').single();
   if (error) throw error;
-  return mapChildRow(data);
+  void writeAuditLog(client, userId, {
+    action: 'create',
+    entityType: 'child',
+    entityId: data.id,
+    metadata: { name: child.name, gender: child.gender },
+  });
+  return mapChildRow(data, userId);
 }
 
-export async function updateChildRow(client: Client, child: Child): Promise<Child> {
+export async function updateChildRow(client: Client, child: Child, userId?: string): Promise<Child> {
   const photoUrl = httpPhotoUrlForDb(child.photo);
+  const updates = userId
+    ? encryptChildRow({
+        name: child.name,
+        date_of_birth: child.dateOfBirth,
+        gender: child.gender,
+        blood_group: child.bloodGroup ?? null,
+        avatar_id: child.avatarId?.trim() || null,
+        photo_url: photoUrl,
+        notes: child.notes ?? null,
+      }, userId)
+    : {
+        name: child.name,
+        date_of_birth: child.dateOfBirth,
+        gender: child.gender,
+        blood_group: child.bloodGroup ?? null,
+        avatar_id: child.avatarId?.trim() || null,
+        photo_url: photoUrl,
+        notes: child.notes ?? null,
+      };
   const { data, error } = await client
     .from('children')
-    .update({
-      name: child.name,
-      date_of_birth: child.dateOfBirth,
-      gender: child.gender,
-      blood_group: child.bloodGroup ?? null,
-      avatar_id: child.avatarId?.trim() || null,
-      photo_url: photoUrl,
-      notes: child.notes ?? null,
-    })
+    .update(updates)
     .eq('id', child.id)
     .select('*')
     .single();
   if (error) throw error;
-  return mapChildRow(data);
+  if (userId) {
+    void writeAuditLog(client, userId, {
+      action: 'update',
+      entityType: 'child',
+      entityId: child.id,
+      metadata: { name: child.name },
+    });
+  }
+  return mapChildRow(data, userId);
 }
 
-export async function deleteChildRow(client: Client, id: string): Promise<void> {
+export async function deleteChildRow(client: Client, id: string, userId?: string): Promise<void> {
   const { error } = await client.from('children').delete().eq('id', id);
   if (error) throw error;
+  if (userId) {
+    void writeAuditLog(client, userId, {
+      action: 'delete',
+      entityType: 'child',
+      entityId: id,
+    });
+  }
 }
 
-export async function upsertVisit(client: Client, v: HospitalVisit): Promise<HospitalVisit> {
-  const row = {
+export async function upsertVisit(client: Client, v: HospitalVisit, userId?: string): Promise<HospitalVisit> {
+  const raw = {
     id: v.id,
     child_id: v.childId,
     visit_date: v.date,
@@ -216,6 +258,7 @@ export async function upsertVisit(client: Client, v: HospitalVisit): Promise<Hos
     notes: v.notes ?? null,
     created_at: v.createdAt,
   };
+  const row = userId ? encryptVisitRow(raw, userId) : raw;
   let { data, error } = await client.from('hospital_visits').upsert(row, { onConflict: 'id' }).select('*').single();
   if (error && isMissingLinkedVisitIdColumnError(error)) {
     const { linked_visit_id: _omit, ...legacyRow } = row;
@@ -228,12 +271,27 @@ export async function upsertVisit(client: Client, v: HospitalVisit): Promise<Hos
     error = second.error;
   }
   if (error) throw error;
-  return mapVisitRow(data);
+  if (userId) {
+    void writeAuditLog(client, userId, {
+      action: v.createdAt === data.created_at ? 'update' : 'create',
+      entityType: 'hospital_visit',
+      entityId: data.id,
+      metadata: { hospitalName: v.hospitalName, reason: v.reason, childId: v.childId },
+    });
+  }
+  return mapVisitRow(data, userId);
 }
 
-export async function deleteVisitRow(client: Client, id: string): Promise<void> {
+export async function deleteVisitRow(client: Client, id: string, userId?: string): Promise<void> {
   const { error } = await client.from('hospital_visits').delete().eq('id', id);
   if (error) throw error;
+  if (userId) {
+    void writeAuditLog(client, userId, {
+      action: 'delete',
+      entityType: 'hospital_visit',
+      entityId: id,
+    });
+  }
 }
 
 export async function upsertVaccination(client: Client, userId: string, v: Vaccination): Promise<Vaccination> {
@@ -251,7 +309,7 @@ export async function upsertVaccination(client: Client, userId: string, v: Vacci
     cardPath = null;
   }
 
-  const row = {
+  const raw = {
     id: v.id,
     child_id: v.childId,
     vaccine_name: v.vaccineName,
@@ -270,19 +328,34 @@ export async function upsertVaccination(client: Client, userId: string, v: Vacci
     card_photo_storage_path: cardPath,
     created_at: v.createdAt,
   };
+  const row = encryptVaccinationRow(raw, userId);
 
+  const isNew = !prev;
   const { data, error } = await client.from('vaccinations').upsert(row, { onConflict: 'id' }).select('*').single();
   if (error) throw error;
+  void writeAuditLog(client, userId, {
+    action: isNew ? 'create' : 'update',
+    entityType: 'vaccination',
+    entityId: data.id,
+    metadata: { vaccineName: v.vaccineName, childId: v.childId },
+  });
   if (data.card_photo_storage_path) {
     const url = await getSignedUrl(client, data.card_photo_storage_path);
-    return mapVaxRow(data, url);
+    return mapVaxRow(data, url, userId);
   }
-  return mapVaxRow(data);
+  return mapVaxRow(data, undefined, userId);
 }
 
-export async function deleteVaccinationRow(client: Client, id: string): Promise<void> {
+export async function deleteVaccinationRow(client: Client, id: string, userId?: string): Promise<void> {
   const { error } = await client.from('vaccinations').delete().eq('id', id);
   if (error) throw error;
+  if (userId) {
+    void writeAuditLog(client, userId, {
+      action: 'delete',
+      entityType: 'vaccination',
+      entityId: id,
+    });
+  }
 }
 
 export async function upsertPrescription(client: Client, userId: string, p: Prescription): Promise<Prescription> {
@@ -308,7 +381,7 @@ export async function upsertPrescription(client: Client, userId: string, p: Pres
     imagePath = null;
   }
 
-  const row = {
+  const raw = {
     id: p.id,
     child_id: p.childId,
     visit_id: p.visitId ?? null,
@@ -323,56 +396,79 @@ export async function upsertPrescription(client: Client, userId: string, p: Pres
     prescription_image_storage_path: imagePath,
     created_at: p.createdAt,
   };
+  const row = encryptPrescriptionRow(raw, userId);
 
   if (prev) {
     const { data, error } = await client.from('prescriptions').update(row).eq('id', p.id).select('*').single();
     if (error) throw error;
     if (!data) throw new Error('Prescription update returned no row');
     await client.from('prescription_medicines').delete().eq('prescription_id', p.id);
-    await insertMedicines(client, p.id, p);
-    return loadPrescriptionById(client, data.id);
+    await insertMedicines(client, p.id, p, userId);
+    void writeAuditLog(client, userId, {
+      action: 'update',
+      entityType: 'prescription',
+      entityId: p.id,
+      metadata: { prescribingDoctor: p.prescribingDoctor, childId: p.childId, medicineCount: p.medicines?.length ?? 0 },
+    });
+    return loadPrescriptionById(client, data.id, userId);
   }
 
   const { data, error } = await client.from('prescriptions').insert(row).select('*').single();
   if (error) throw error;
   if (!data) throw new Error('Prescription insert returned no row');
-  await insertMedicines(client, p.id, p);
-  return loadPrescriptionById(client, data.id);
+  await insertMedicines(client, p.id, p, userId);
+  void writeAuditLog(client, userId, {
+    action: 'create',
+    entityType: 'prescription',
+    entityId: data.id,
+    metadata: { prescribingDoctor: p.prescribingDoctor, childId: p.childId, medicineCount: p.medicines?.length ?? 0 },
+  });
+  return loadPrescriptionById(client, data.id, userId);
 }
 
-async function insertMedicines(client: Client, prescriptionId: string, p: Prescription): Promise<void> {
+async function insertMedicines(client: Client, prescriptionId: string, p: Prescription, userId?: string): Promise<void> {
   const meds = p.medicines?.filter((m) => m.name.trim()) ?? [];
   if (meds.length === 0) return;
-  const rows = meds.map((m, i) => ({
-    id: randomUUID(),
-    prescription_id: prescriptionId,
-    name: m.name,
-    dosage: m.dosage,
-    frequency: m.frequency,
-    duration: m.duration,
-    sort_order: i,
-  }));
+  const rows = meds.map((m, i) => {
+    const raw = {
+      id: randomUUID(),
+      prescription_id: prescriptionId,
+      name: m.name,
+      dosage: m.dosage,
+      frequency: m.frequency,
+      duration: m.duration,
+      sort_order: i,
+    };
+    return userId ? encryptPrescriptionMedicineRow(raw, userId) : raw;
+  });
   const { error } = await client.from('prescription_medicines').insert(rows);
   if (error) throw error;
 }
 
-async function loadPrescriptionById(client: Client, id: string): Promise<Prescription> {
+async function loadPrescriptionById(client: Client, id: string, userId?: string): Promise<Prescription> {
   const { data, error } = await client.from('prescriptions').select('*, prescription_medicines(*)').eq('id', id).single();
   if (error) throw error;
   if (!data) throw new Error('Prescription not found');
   const meds = embeddedPrescriptionMedicines(data.prescription_medicines)
     .sort((a, b) => a.sort_order - b.sort_order)
-    .map(mapRxMedRow);
+    .map((m) => mapRxMedRow(m, userId));
   const img = data.prescription_image_storage_path
     ? await getSignedUrl(client, data.prescription_image_storage_path)
     : undefined;
   const { prescription_medicines: _, ...row } = data;
-  return mapRxRow(row as Database['public']['Tables']['prescriptions']['Row'], meds, img);
+  return mapRxRow(row as Database['public']['Tables']['prescriptions']['Row'], meds, img, userId);
 }
 
-export async function deletePrescriptionRow(client: Client, id: string): Promise<void> {
+export async function deletePrescriptionRow(client: Client, id: string, userId?: string): Promise<void> {
   const { error } = await client.from('prescriptions').delete().eq('id', id);
   if (error) throw error;
+  if (userId) {
+    void writeAuditLog(client, userId, {
+      action: 'delete',
+      entityType: 'prescription',
+      entityId: id,
+    });
+  }
 }
 
 export async function insertDocument(
@@ -391,7 +487,7 @@ export async function insertDocument(
     dataUrl,
     fileType,
   );
-  const row = {
+  const raw = {
     id: d.id,
     child_id: d.childId,
     visit_id: d.visitId ?? null,
@@ -404,23 +500,37 @@ export async function insertDocument(
     notes: d.notes ?? null,
     created_at: d.createdAt,
   };
+  const row = encryptDocumentRow(raw, userId);
   const { data, error } = await client.from('documents').insert(row).select('*').single();
   if (error) throw error;
+  void writeAuditLog(client, userId, {
+    action: 'create',
+    entityType: 'document',
+    entityId: data.id,
+    metadata: { name: d.name, documentType: d.type, childId: d.childId },
+  });
   const url = await getSignedUrl(client, data.storage_path);
-  return mapDocRow(data, url);
+  return mapDocRow(data, url, userId);
 }
 
-export async function deleteDocumentRow(client: Client, id: string): Promise<void> {
+export async function deleteDocumentRow(client: Client, id: string, userId?: string): Promise<void> {
   const { error } = await client.from('documents').delete().eq('id', id);
   if (error) throw error;
+  if (userId) {
+    void writeAuditLog(client, userId, {
+      action: 'delete',
+      entityType: 'document',
+      entityId: id,
+    });
+  }
 }
 
 type BillRow = Database['public']['Tables']['billing_records']['Row'];
 
-async function mapBillRowWithSignedReceipt(client: Client, data: BillRow): Promise<BillingRecord> {
-  if (!data.receipt_image_storage_path) return mapBillRow(data);
+async function mapBillRowWithSignedReceipt(client: Client, data: BillRow, userId?: string): Promise<BillingRecord> {
+  if (!data.receipt_image_storage_path) return mapBillRow(data, undefined, userId);
   const url = await getSignedUrl(client, data.receipt_image_storage_path);
-  return mapBillRow(data, url);
+  return mapBillRow(data, url, userId);
 }
 
 export async function upsertBilling(client: Client, userId: string, b: BillingRecord): Promise<BillingRecord> {
@@ -438,7 +548,7 @@ export async function upsertBilling(client: Client, userId: string, b: BillingRe
     receiptPath = null;
   }
 
-  const row = {
+  const raw = {
     id: b.id,
     child_id: b.childId,
     visit_id: b.visitId ?? null,
@@ -449,16 +559,31 @@ export async function upsertBilling(client: Client, userId: string, b: BillingRe
     receipt_image_storage_path: receiptPath,
     created_at: b.createdAt,
   };
+  const row = encryptBillingRow(raw, userId);
 
-  const query = existing
+  const isUpdate = !!existing;
+  const query = isUpdate
     ? client.from('billing_records').update(row).eq('id', b.id)
     : client.from('billing_records').insert(row);
   const { data, error } = await query.select('*').single();
   if (error) throw error;
-  return mapBillRowWithSignedReceipt(client, data);
+  void writeAuditLog(client, userId, {
+    action: isUpdate ? 'update' : 'create',
+    entityType: 'billing_record',
+    entityId: data.id,
+    metadata: { hospitalName: b.hospitalName, amount: b.amount, childId: b.childId },
+  });
+  return mapBillRowWithSignedReceipt(client, data, userId);
 }
 
-export async function deleteBillingRow(client: Client, id: string): Promise<void> {
+export async function deleteBillingRow(client: Client, id: string, userId?: string): Promise<void> {
   const { error } = await client.from('billing_records').delete().eq('id', id);
   if (error) throw error;
+  if (userId) {
+    void writeAuditLog(client, userId, {
+      action: 'delete',
+      entityType: 'billing_record',
+      entityId: id,
+    });
+  }
 }

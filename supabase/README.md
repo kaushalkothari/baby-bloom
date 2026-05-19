@@ -2,6 +2,12 @@
 
 Migrations live in `supabase/migrations/`. Apply them to your **hosted** project with the CLI.
 
+## Troubleshooting
+
+- **`404 Not Found` for `supbase@*`** — The CLI name is **`supabase`** (ends in **abase**), not `supbase`. Use `npx supabase …` or the npm scripts below after `npm install`.
+- **`link --project-ref`** — Use the **Project ID** from Dashboard → **Settings → General** (a string like `abcdxyz12345`), not the display name (e.g. “BabyBloom”).
+- **Audit log empty in the app** — After `npm run db:push`, all migrations under `supabase/migrations/` that define `audit_logs` / `log_audit_event` must be applied (including any `20260511*_audit_*.sql` files). Use **Audit Log → Test write** in the app to confirm inserts work.
+
 ## One-time setup
 
 1. **Install deps** (includes the CLI): `npm install`

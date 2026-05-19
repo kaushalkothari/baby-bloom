@@ -11,6 +11,7 @@ import { getSupabaseBrowserClient } from './client';
 import { isSupabaseConfigured } from './config';
 import { SupabaseAuthContext } from './supabase-auth-context';
 import type { SupabaseAuthContextValue } from './auth-types';
+import { writeAuditLog } from '@/lib/audit/auditLogger';
 
 export function SupabaseAuthProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
@@ -48,7 +49,10 @@ export function SupabaseAuthProvider({ children }: { children: React.ReactNode }
   const signInWithEmail = useCallback(
     async (email: string, password: string) => {
       if (!client) return { error: new Error('Supabase is not configured') };
-      const { error } = await client.auth.signInWithPassword({ email, password });
+      const { data, error } = await client.auth.signInWithPassword({ email, password });
+      if (!error && data.user) {
+        await writeAuditLog(client, data.user.id, { action: 'sign_in', metadata: { method: 'email' } });
+      }
       return { error: error ? new Error(error.message) : null };
     },
     [client],
@@ -57,12 +61,15 @@ export function SupabaseAuthProvider({ children }: { children: React.ReactNode }
   const signUpWithEmail = useCallback(
     async (email: string, password: string, displayName?: string) => {
       if (!client) return { error: new Error('Supabase is not configured') };
-      const { error } = await client.auth.signUp({
+      const { data, error } = await client.auth.signUp({
         email,
         password,
         options: displayName ? { data: { display_name: displayName } } : undefined,
       });
       if (error) return { error: new Error(error.message) };
+      if (data.user) {
+        await writeAuditLog(client, data.user.id, { action: 'sign_up', metadata: { method: 'email' } });
+      }
       return { error: null };
     },
     [client],
@@ -70,17 +77,27 @@ export function SupabaseAuthProvider({ children }: { children: React.ReactNode }
 
   const signOut = useCallback(async () => {
     if (!client) return;
+    const uid = session?.user?.id;
+    if (uid) {
+      await writeAuditLog(client, uid, { action: 'sign_out' });
+    }
     await client.auth.signOut();
-  }, [client]);
+  }, [client, session]);
 
   const resetPasswordForEmail = useCallback(
     async (email: string) => {
       if (!client) return { error: new Error('Supabase is not configured') };
       const redirect = `${window.location.origin}/login`;
       const { error } = await client.auth.resetPasswordForEmail(email, { redirectTo: redirect });
+      if (!error && session?.user?.id) {
+        await writeAuditLog(client, session.user.id, {
+          action: 'password_reset_request',
+          metadata: { method: 'email' },
+        });
+      }
       return { error: error ? new Error(error.message) : null };
     },
-    [client],
+    [client, session],
   );
 
   const value = useMemo<SupabaseAuthContextValue>(

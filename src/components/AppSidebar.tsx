@@ -7,7 +7,7 @@
 
 import {
   Baby, LayoutDashboard, Stethoscope, TrendingUp,
-  Syringe, Pill, FileText, ReceiptIndianRupee, Users,
+  Syringe, Pill, FileText, ReceiptIndianRupee, Users, ShieldCheck,
 } from 'lucide-react';
 import { NavLink } from '@/components/NavLink';
 import { useApp } from '@/lib/contexts/AppContext';
@@ -30,6 +30,7 @@ const navItems = [
   { key: 'nav.prescriptions', url: '/prescriptions', icon: Pill },
   { key: 'nav.billing', url: '/billing', icon: ReceiptIndianRupee },
   { key: 'nav.documents', url: '/documents', icon: FileText },
+  { key: 'nav.auditLog', url: '/audit-log', icon: ShieldCheck },
 ];
 
 export function AppSidebar() {
